@@ -112,7 +112,13 @@ class SingBoxVpnManager {
         const directory = GLib.build_filenamev([GLib.get_user_cache_dir(), 'sing-box']);
         GLib.mkdir_with_parents(directory, 0o700);
         const path = GLib.build_filenamev([directory, `${link.id}.json`]);
-        GLib.file_set_contents(path, JSON.stringify(buildSingBoxConfig(link.url), null, 2));
+
+        // A profile carries a whole configuration from the provider; a share
+        // link only describes one node, so we generate the rest ourselves.
+        const config = link.kind === 'profile' ? link.config : buildSingBoxConfig(link.url);
+        if (!config) throw new Error('This subscription has no cached configuration yet');
+
+        GLib.file_set_contents(path, JSON.stringify(config, null, 2));
         GLib.chmod(path, 0o600);
         return path;
     }
