@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: sing-box Link Manager 1\n"
 "Report-Msgid-Bugs-To: https://github.com/gname/gname-shell-extension-singbox/"
 "issues\n"
-"POT-Creation-Date: 2026-08-21 09:05-0400\n"
+"POT-Creation-Date: 2026-08-21 09:23-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -143,24 +143,24 @@ msgstr ""
 msgid "Start command saved"
 msgstr ""
 
-#: prefs.js:164
-msgid "zbarimg is not installed, so QR images cannot be read"
+#: prefs.js:166
+msgid "QR images need the zbarimg tool: install the zbar-tools package"
 msgstr ""
 
-#: prefs.js:168
+#: prefs.js:170
 msgid "Choose a QR code image"
 msgstr ""
 
-#: prefs.js:186
+#: prefs.js:188
 #, javascript-format
 msgid "Could not run zbarimg: %s"
 msgstr ""
 
-#: prefs.js:195
+#: prefs.js:197
 #, javascript-format
 msgid "Could not read the QR image: %s"
 msgstr ""
 
-#: prefs.js:201
+#: prefs.js:203
 msgid "No QR code was found in that image"
 msgstr ""

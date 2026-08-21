@@ -8,6 +8,7 @@ import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Ex
 import {COUNTRY_ORDER, format, isSupportedUrl, sortLinks} from './lib/config.js';
 
 const SCHEMA = 'org.gnome.shell.extensions.gname-shell-extension-singbox';
+const APP_NAME = 'Sing-box';
 
 function readLinks(settings) {
     try {
@@ -51,7 +52,7 @@ export default class SingBoxPreferences extends ExtensionPreferences {
         const toast = message => window.add_toast(new Adw.Toast({title: message, timeout: 3}));
 
         const page = new Adw.PreferencesPage({
-            title: 'sing-box',
+            title: APP_NAME,
             icon_name: 'network-vpn-symbolic',
         });
 
@@ -161,7 +162,9 @@ export default class SingBoxPreferences extends ExtensionPreferences {
 
     _importFromQrImage(window, addUrl, toast) {
         if (!GLib.find_program_in_path('zbarimg')) {
-            toast(_('zbarimg is not installed, so QR images cannot be read'));
+            // The zbar library alone is not enough; the command line tool ships
+            // separately (zbar-tools on Debian and Ubuntu, zbar elsewhere).
+            toast(_('QR images need the zbarimg tool: install the zbar-tools package'));
             return;
         }
 

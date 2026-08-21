@@ -16,6 +16,10 @@ import {
 
 const SCHEMA = 'org.gnome.shell.extensions.gname-shell-extension-singbox';
 
+// Display name. The cache directory below deliberately keeps upstream's
+// lowercase spelling, because it is a path rather than a label.
+const APP_NAME = 'Sing-box';
+
 function loadSingBoxIcon(extensionPath) {
     return new Gio.FileIcon({
         file: Gio.File.new_for_path(
@@ -54,7 +58,7 @@ class SingBoxVpnManager {
             argv = [...command, configPath];
         } catch (error) {
             if (configPath) GLib.unlink(configPath);
-            Main.notify('sing-box', format(_('Could not generate the configuration: %s'), error.message));
+            Main.notify(APP_NAME, format(_('Could not generate the configuration: %s'), error.message));
             return;
         }
 
@@ -63,14 +67,14 @@ class SingBoxVpnManager {
             process = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDERR_PIPE);
         } catch (error) {
             GLib.unlink(configPath);
-            Main.notify('sing-box', format(_('Could not start the sing-box backend: %s'), error.message));
+            Main.notify(APP_NAME, format(_('Could not start the sing-box backend: %s'), error.message));
             return;
         }
 
         this._process = process;
         this.activeLink = link;
         this._onChanged();
-        Main.notify('sing-box', format(_('Connecting to %s'), link.name));
+        Main.notify(APP_NAME, format(_('Connecting to %s'), link.name));
 
         process.communicate_utf8_async(null, null, (_source, result) =>
             this._onProcessExited(process, link, result));
@@ -140,12 +144,12 @@ class SingBoxVpnManager {
         this._onChanged();
 
         if (process.get_successful()) {
-            Main.notify('sing-box', format(_('%s disconnected'), link.name));
+            Main.notify(APP_NAME, format(_('%s disconnected'), link.name));
             return;
         }
 
         Main.notify(
-            'sing-box',
+            APP_NAME,
             format(_('%s stopped: %s'),
                 link.name,
                 describeProcessFailure(stderr, _('sing-box exited unexpectedly'))));
@@ -157,7 +161,7 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
     _init(extension, settings, vpn) {
         const icon = loadSingBoxIcon(extension.path);
         super._init({
-            title: 'sing-box',
+            title: APP_NAME,
             subtitle: _('Not connected'),
             gicon: icon,
             toggleMode: true,
@@ -168,7 +172,7 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         this._settings = settings;
         this._vpn = vpn;
 
-        this.menu.setHeader(this._icon, 'sing-box', _('Not connected'));
+        this.menu.setHeader(this._icon, APP_NAME, _('Not connected'));
 
         this._linksSection = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._linksSection);
@@ -191,7 +195,7 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
 
         this.subtitle = active ? active.name : _('Not connected');
         this.checked = Boolean(active);
-        this.menu.setHeader(this._icon, 'sing-box', this.subtitle);
+        this.menu.setHeader(this._icon, APP_NAME, this.subtitle);
 
         if (links.length === 0) {
             const empty = new PopupMenu.PopupMenuItem(_('No connections yet, click to import'));
@@ -220,7 +224,7 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
             return;
         }
 
-        Main.notify('sing-box', _('No connections available, import one first'));
+        Main.notify(APP_NAME, _('No connections available, import one first'));
         this._openPreferences();
     }
 

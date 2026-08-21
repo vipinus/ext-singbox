@@ -34,6 +34,22 @@ else
     printf '%s\n' '未找到 msgfmt，跳过翻译安装（界面将显示英文）。' >&2
 fi
 
-printf '已安装到 %s\n' "$INSTALL_DIR"
+# QR import is optional, so a missing zbarimg is a warning rather than an error.
+# The zbar library is often already present; the command line tool is not.
+if ! command -v zbarimg >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+        hint='sudo apt install zbar-tools'
+    elif command -v dnf >/dev/null 2>&1; then
+        hint='sudo dnf install zbar'
+    elif command -v pacman >/dev/null 2>&1; then
+        hint='sudo pacman -S zbar'
+    else
+        hint='请通过发行版包管理器安装 zbar 命令行工具'
+    fi
+    printf '\n%s\n' '提示：未找到 zbarimg，二维码图片导入将不可用（URL 导入不受影响）。'
+    printf '安装命令：%s\n' "$hint"
+fi
+
+printf '\n已安装到 %s\n' "$INSTALL_DIR"
 printf '%s\n' '请注销并重新登录，或在 GNOME Shell 中重启扩展后启用：'
 printf 'gnome-extensions enable %s\n' "$UUID"
