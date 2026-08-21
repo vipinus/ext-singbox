@@ -12,5 +12,10 @@
       <summary>sing-box command</summary>
       <description>Command and arguments used to start the generated TUN configuration. The config path is appended as the final argument.</description>
     </key>
+    <key name="last-link-id" type="s">
+      <default>''</default>
+      <summary>Most recently connected entry</summary>
+      <description>Id of the entry connected most recently. The Quick Settings tile reconnects to it instead of picking whatever happens to sort first — with 24 imported regions that would always be the alphabetically first one.</description>
+    </key>
   </schema>
 </schemalist>

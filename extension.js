@@ -82,6 +82,9 @@ class SingBoxVpnManager {
 
         this._process = process;
         this.activeLink = link;
+        // 记下这次连的是哪条：磁贴开关在未连接时要连回它。
+        // 写在这里而不是 toggle()：只有真正起了进程才算「连过」。
+        this._settings.set_string('last-link-id', link.id);
         this._onChanged();
         Main.notify(APP_NAME, format(_('Connecting to %s'), link.name));
 
@@ -289,8 +292,11 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         // 最初是平铺的——当时列表里只有两三条，子菜单等于给最常用的操作多加一次
         // 点击。批量导入上线后一次就是 24 条，平铺直接撑出屏幕，看不到底下的
         // 状态行和首选项。这是 tor-ext 用子菜单装 50 个国家的同一个理由。
+        // 标题显示的是「点磁贴会连哪条」：连接中就是当前那条，未连接则是上次那条。
+        // 未连接时显示「未选择」是不诚实的——磁贴明明有确定的目标。
+        const target = active || this._preferredLink(links);
         const submenu = new PopupMenu.PopupSubMenuMenuItem(
-            format(_('Server: %s'), active ? active.name : _('None')));
+            format(_('Server: %s'), target ? target.name : _('None')));
 
         // ⚠️ 高度封顶必须连同 _needsScrollbar 一起覆盖。
         // gnome-shell 的 PopupSubMenu._needsScrollbar() 读的是**顶层菜单**的
@@ -330,6 +336,17 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         this._linksSection.addMenuItem(submenu);
     }
 
+    /**
+     * 点磁贴开关时该连哪条：上次连过的那条，其次才是列表第一条。
+     *
+     * 没有这个的话，导入 24 个地区之后点磁贴永远连排序最靠前的那个（澳大利亚），
+     * 而用户想要的几乎总是上次那条。记住的条目被删掉时自动回落。
+     */
+    _preferredLink(links) {
+        const last = this._settings.get_string('last-link-id');
+        return links.find(link => link.id === last) || links[0] || null;
+    }
+
     _onClicked() {
         if (this._vpn.activeLink) {
             this._vpn.stop();
@@ -337,8 +354,9 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         }
 
         const links = sortLinks(parseLinks(this._settings.get_string('links')));
-        if (links.length > 0) {
-            this._vpn.start(links[0]);
+        const target = this._preferredLink(links);
+        if (target) {
+            this._vpn.start(target);
             return;
         }
 
