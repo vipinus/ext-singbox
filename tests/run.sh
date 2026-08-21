@@ -101,6 +101,30 @@ else
     fi
 fi
 
+# install.sh 靠 pkcheck 判断特权步骤能不能跳过。它查的 action 必须是规则真正
+# 放行的子集——多查一个规则里没有的，pkcheck 永远返回未授权，跳过逻辑就成了摆设，
+# 而且不会报错，只会表现为「每次装都还是要密码」，很难联想到是这里。
+checked=$(sed -n 's/^ *for action in \(.*\); do$/\1/p' install.sh | tr ' ' '\n' |
+    sed 's/^/org.freedesktop.resolve1./' | sort -u)
+if [ -z "$checked" ]; then
+    fail 'could not find the pkcheck action list in install.sh'
+else
+    # 用循环而不是 comm + <(...)：进程替换是 bash 语法，这个文件是 #!/bin/sh，
+    # dash 直接语法错误（上面那条 sh -n 检查就是这么抓到的）。
+    missing=''
+    for action in $checked; do
+        printf '%s\n' "$granted" | grep -qx "$action" || missing="$missing$action
+"
+    done
+    if [ -z "$missing" ]; then
+        printf 'install.sh checks %s actions, all granted by the rule\n' \
+            "$(printf '%s\n' "$checked" | wc -l)"
+    else
+        fail 'install.sh checks actions the polkit rule does not grant'
+        printf 'not granted:\n%s\n' "$missing" >&2
+    fi
+fi
+
 step 'Extension metadata'
 if command -v gjs >/dev/null 2>&1; then
     gjs -c 'const m = JSON.parse(new TextDecoder().decode(

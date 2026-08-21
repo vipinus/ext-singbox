@@ -27,6 +27,18 @@ format introduced in that release.
 设置 `CAP_NET_ADMIN` 与 `CAP_NET_RAW`、安装一条 polkit 规则。扩展与 sing-box
 始终以当前用户运行，不会以 root 运行。脚本同时会编译 GSettings schema 并安装翻译。
 
+这三件都是幂等的，所以**第二次之后的安装不会再要密码**：脚本先自查一遍，都就位就
+跳过 `pkexec`。要强制重做（例如手工删过 polkit 规则）：
+
+```sh
+FORCE_PRIVILEGED_SETUP=1 ./install.sh
+```
+
+⚠️ polkit 规则那一项不是靠「文件在不在」判断的——`/etc/polkit-1/rules.d` 是
+`root:polkitd 0750`，普通用户连 `stat` 都不行。改成用 `pkcheck` 直接问 polkitd
+「我现在有没有这个权限」，是功能验证而非代理指标：规则被删、被改窄、或写的是别的
+用户，它都会如实返回未授权，于是重新请求授权。
+
 ### 那条 polkit 规则是干什么的
 
 sing-box 要通过 DBus 让 systemd-resolved 把 DNS 指进隧道。resolve1 的每个方法都是
