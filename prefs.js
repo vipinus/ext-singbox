@@ -11,7 +11,10 @@ import {
     isRemoteProfileUrl,
     isSupportedUrl,
     isValidRemoteConfig,
+    localeTag,
     parseRemoteProfileLink,
+    regionKeyOf,
+    subscriptionsUrl,
     sortLinks,
 } from './lib/config.js';
 import {fetchText} from './lib/fetch.js';
@@ -210,6 +213,139 @@ export default class SingBoxPreferences extends ExtensionPreferences {
             });
         };
 
+        // 从 anyfq.com 批量导入：一次把全部地区拉下来，已有的按地区跳过。
+        //
+        // 令牌的来源顺序是：输入框里刚粘的订阅链接 → 任何一个已有的订阅条目。
+        // 后者意味着导过一次之后，批量导入不需要用户再提供任何东西——而这正是
+        // 常见场景：先扫一个码试通了，再想把其余地区补齐。
+        const bulkButton = new Gtk.Button({
+            label: _('Import all from anyfq.com'),
+            halign: Gtk.Align.END,
+            valign: Gtk.Align.CENTER,
+        });
+
+        const bulkImport = () => {
+            let configUrl = null;
+
+            const typed = urlRow.text.trim();
+            if (typed && isRemoteProfileUrl(typed)) {
+                try {
+                    configUrl = parseRemoteProfileLink(typed).url;
+                } catch (_error) {
+                    // 链接坏了就当没提供，下面会退回已有条目
+                }
+            }
+            if (!configUrl) {
+                const existing = readLinks(settings).find(link => link.kind === 'profile' && link.url);
+                if (existing) configUrl = existing.url;
+            }
+            if (!configUrl) {
+                toast(_('Import one subscription first, or paste a subscription link above'));
+                return;
+            }
+
+            let listUrl;
+            try {
+                listUrl = subscriptionsUrl(configUrl, localeTag());
+            } catch (error) {
+                toast(format(_('Could not build the region list URL: %s'), error.message));
+                return;
+            }
+
+            const finish = message => {
+                bulkButton.sensitive = true;
+                bulkButton.label = _('Import all from anyfq.com');
+                refresh();
+                toast(message);
+            };
+
+            bulkButton.sensitive = false;
+            bulkButton.label = _('Fetching the region list…');
+
+            fetchText(listUrl, importCancellable, (text, error) => {
+                if (error !== null) {
+                    // 令牌过期是这里最常见的失败，且用户完全可以自己解决，
+                    // 所以把原因原样带出来，不要只说「失败了」。
+                    finish(format(_('Could not fetch the region list: %s'), error));
+                    return;
+                }
+
+                let list;
+                try {
+                    list = JSON.parse(text);
+                } catch (parseError) {
+                    finish(format(_('The region list is not valid JSON: %s'), parseError.message));
+                    return;
+                }
+                if (!Array.isArray(list) || list.length === 0) {
+                    finish(_('The region list came back empty'));
+                    return;
+                }
+
+                // 按地区去重，而不是按 URL——令牌每 24 小时轮换，
+                // 按 URL 比对会让每次批量导入都多出一整套地区。
+                const known = new Set(readLinks(settings).map(regionKeyOf).filter(Boolean));
+                const wanted = list.filter(entry =>
+                    entry && entry.url && !known.has(String(entry.region || '').toLowerCase()));
+
+                const skipped = list.length - wanted.length;
+                if (wanted.length === 0) {
+                    finish(format(_('Nothing to import: all %s regions are already here'),
+                        String(list.length)));
+                    return;
+                }
+
+                const added = [];
+                let failed = 0;
+
+                // 串行抓取。并行会同时开 24 条 TLS 连接去打同一台机器，
+                // 对一个一次性操作来说没必要，也更难在中途报进度。
+                const step = index => {
+                    if (index >= wanted.length) {
+                        if (added.length > 0)
+                            saveLinks(settings, [...readLinks(settings), ...added]);
+                        finish(format(_('Imported %s, skipped %s, failed %s'),
+                            String(added.length), String(skipped), String(failed)));
+                        return;
+                    }
+
+                    const entry = wanted[index];
+                    bulkButton.label = format(_('Importing… %s/%s'),
+                        String(index + 1), String(wanted.length));
+
+                    fetchText(entry.url, importCancellable, (body, fetchError) => {
+                        // 单个地区失败不该让整批停下：换个地区往往就好了，
+                        // 而已经抓到的那些对用户是有价值的。
+                        if (fetchError !== null) {
+                            failed += 1;
+                            step(index + 1);
+                            return;
+                        }
+                        const result = isValidRemoteConfig(body);
+                        if (!result.ok) {
+                            failed += 1;
+                            step(index + 1);
+                            return;
+                        }
+                        added.push({
+                            id: GLib.uuid_string_random(),
+                            kind: 'profile',
+                            name: entry.name || String(entry.region || '').toUpperCase(),
+                            flag: entry.flag || '🔗',
+                            url: entry.url,
+                            config: result.config,
+                            fetchedAt: GLib.DateTime.new_now_utc().format_iso8601(),
+                        });
+                        step(index + 1);
+                    });
+                };
+
+                step(0);
+            });
+        };
+
+        bulkButton.connect('clicked', bulkImport);
+
         const importButton = new Gtk.Button({
             label: _('Import URL'),
             halign: Gtk.Align.END,
@@ -227,6 +363,7 @@ export default class SingBoxPreferences extends ExtensionPreferences {
         qrButton.connect('clicked', () => this._importFromQrImage(window, addUrl, toast));
 
         const buttonRow = new Adw.ActionRow();
+        buttonRow.add_suffix(bulkButton);
         buttonRow.add_suffix(qrButton);
         buttonRow.add_suffix(importButton);
         importGroup.add(buttonRow);

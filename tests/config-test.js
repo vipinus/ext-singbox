@@ -11,7 +11,9 @@ import {
     parseLinks,
     parseProxyUrl,
     parseRemoteProfileLink,
+    regionKeyOf,
     sortLinks,
+    subscriptionsUrl,
 } from '../lib/config.js';
 
 import {
@@ -332,4 +334,56 @@ test('only the supported schemes are importable', () => {
     assert(!isSupportedUrl('http://example.com'), 'plain http is not a proxy link');
 });
 
+
+// --- Bulk import from anyfq.com -------------------------------------------
+
+const CFG = 'https://www.anyfq.com/api/v1/singbox/config?token=abc.def&region=us';
+
+test('the subscription list URL reuses the same token and host', () => {
+    assertEqual(subscriptionsUrl(CFG, 'zh-CN'),
+        'https://www.anyfq.com/api/v1/singbox/subscriptions?token=abc.def&locale=zh-CN');
+});
+
+test('the subscription list URL keeps the mirror domain it came from', () => {
+    // 站点有多个镜像域名，写死一个会让另外两个域名的用户跨站取配置
+    assertEqual(subscriptionsUrl('https://8964.date/api/v1/singbox/config?token=t&region=jp', 'en'),
+        'https://8964.date/api/v1/singbox/subscriptions?token=t&locale=en');
+});
+
+test('a configuration URL without a token is rejected up front', () => {
+    // 不带令牌发出去只会换来一个 401，不如当场说清楚
+    assertThrows(() => subscriptionsUrl('https://www.anyfq.com/api/v1/singbox/config', 'en'));
+});
+
+test('the dedupe key comes from the region parameter', () => {
+    assertEqual(regionKeyOf({url: CFG}), 'us');
+    assertEqual(regionKeyOf({url: CFG.replace('region=us', 'region=US')}), 'us');
+});
+
+test('the dedupe key ignores the token', () => {
+    // ⚠️ 整个去重的要害：令牌每 24 小时轮换，同一地区两次导入的 URL 必然不同。
+    // 按 URL 比对会让用户每点一次批量导入就多出一整套地区。
+    assertEqual(regionKeyOf({url: CFG}),
+        regionKeyOf({url: CFG.replace('abc.def', 'zzz.yyy')}));
+});
+
+test('share links fall back to the first hostname label', () => {
+    // ⚠️ 用真实形状：端口位是多端口写法，userinfo 里有百分号编码的 @ 和 :。
+    // 早先这里写的是简化链接，能过 GLib.Uri.parse，于是测试绿着而现实全挂。
+    assertEqual(regionKeyOf({
+        url: 'hysteria2://a%40b.com%3Apw@jp.fanq.in:8443,45000-49999/?insecure=1&sni=jp.fanq.in',
+    }), 'jp');
+    assertEqual(regionKeyOf({url: 'hysteria2://u%40x.com:pw@jp.fanq.in:8443/?sni=jp.fanq.in'}), 'jp');
+});
+
+test('an undecidable entry yields no dedupe key', () => {
+    // 返回 null 表示「判断不了」，调用方按不重复处理：
+    // 宁可多一条，也不该吞掉用户要的地区
+    assertEqual(regionKeyOf({url: 'hysteria2://u:p@203.0.113.7:8443,45000-49999/'}), null);
+    assertEqual(regionKeyOf({url: 'hysteria2://u:p@localhost:8443/'}), null);
+    assertEqual(regionKeyOf(null), null);
+    assertEqual(regionKeyOf({}), null);
+});
+
 imports.system.exit(report());
+

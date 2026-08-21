@@ -6,7 +6,7 @@ msgstr ""
 "Project-Id-Version: sing-box Link Manager 1\n"
 "Report-Msgid-Bugs-To: https://github.com/gname/gname-shell-extension-singbox/"
 "issues\n"
-"POT-Creation-Date: 2026-08-21 11:44-0400\n"
+"POT-Creation-Date: 2026-08-21 12:33-0400\n"
 "PO-Revision-Date: 2026-08-21 00:00+0800\n"
 "Last-Translator: ddxs <fabric.soul7@gmail.com>\n"
 "Language-Team: Chinese (Simplified)\n"
@@ -75,104 +75,148 @@ msgstr "暂无连接，点击导入"
 msgid "No connections available, import one first"
 msgstr "暂无可用连接，请先导入"
 
-#: prefs.js:54
+#: prefs.js:57
 msgid "Subscription"
 msgstr "订阅"
 
-#: prefs.js:67
+#: prefs.js:70
 msgid "Delete this connection"
 msgstr "删除连接"
 
-#: prefs.js:99
+#: prefs.js:102
 msgid "Connections"
 msgstr "连接列表"
 
-#: prefs.js:100
+#: prefs.js:103
 msgid ""
 "Import sing-box connections from a URL or a QR code. The list is ordered by "
 "country."
 msgstr "通过 URL 或二维码导入 sing-box 连接，列表按国家/地区排序。"
 
-#: prefs.js:114
+#: prefs.js:117
 msgid "Connection deleted"
 msgstr "连接已删除"
 
-#: prefs.js:119
+#: prefs.js:122
 msgid "No connections yet"
 msgstr "暂无连接"
 
-#: prefs.js:120
+#: prefs.js:123
 msgid "Paste a URL below, or pick a QR code image"
 msgstr "在下方粘贴 URL，或选择二维码图片"
 
-#: prefs.js:125
+#: prefs.js:128
 msgid "Import a connection"
 msgstr "导入连接"
 
-#: prefs.js:127
+#: prefs.js:130
 msgid "Connection URL"
 msgstr "连接 URL"
 
-#: prefs.js:128
+#: prefs.js:131
 msgid "Connection name"
 msgstr "连接名称"
 
-#: prefs.js:130
+#: prefs.js:133
 msgid "Country or region"
 msgstr "国家/地区"
 
-#: prefs.js:142
+#: prefs.js:145
 msgid "Connection imported"
 msgstr "连接已导入"
 
-#: prefs.js:153
+#: prefs.js:156
 #, javascript-format
 msgid "That subscription link is malformed: %s"
 msgstr "订阅链接格式有误：%s"
 
-#: prefs.js:161
+#: prefs.js:164
 msgid "A subscription URL must use https"
 msgstr "订阅链接必须使用 https"
 
-#: prefs.js:165
+#: prefs.js:168
 msgid "Fetching the subscription…"
 msgstr "正在获取订阅…"
 
-#: prefs.js:168
+#: prefs.js:171
 #, javascript-format
 msgid "Could not fetch the subscription: %s"
 msgstr "无法获取订阅：%s"
 
-#: prefs.js:174
+#: prefs.js:177
 #, javascript-format
 msgid "The subscription did not return a usable configuration: %s"
 msgstr "订阅返回的配置不可用：%s"
 
-#: prefs.js:184
+#: prefs.js:187
 msgid "Unnamed subscription"
 msgstr "未命名订阅"
 
-#: prefs.js:196
+#: prefs.js:199
 msgid "That is not a supported sing-box share link"
 msgstr "请输入有效的 sing-box 分享链接"
 
-#: prefs.js:207
+#: prefs.js:210
 msgid "Unnamed connection"
 msgstr "未命名连接"
 
-#: prefs.js:214
+#: prefs.js:222 prefs.js:257
+msgid "Import all from anyfq.com"
+msgstr "从 anyfq.com 批量导入"
+
+#: prefs.js:243
+msgid "Import one subscription first, or paste a subscription link above"
+msgstr "请先导入一个订阅，或在上方粘贴订阅链接"
+
+#: prefs.js:251
+msgid "Could not build the region list URL: %s"
+msgstr "无法构造地区列表地址：%s"
+
+#: prefs.js:263
+msgid "Fetching the region list…"
+msgstr "正在获取地区列表…"
+
+#: prefs.js:269
+msgid "Could not fetch the region list: %s"
+msgstr "获取地区列表失败：%s"
+
+#: prefs.js:277
+#, javascript-format
+msgid "The region list is not valid JSON: %s"
+msgstr "地区列表不是合法的 JSON：%s"
+
+#: prefs.js:281
+msgid "The region list came back empty"
+msgstr "地区列表是空的"
+
+#: prefs.js:293
+#, javascript-format
+msgid "Nothing to import: all %s regions are already here"
+msgstr "无需导入：%s 个地区都已存在"
+
+#: prefs.js:307
+#, javascript-format
+msgid "Imported %s, skipped %s, failed %s"
+msgstr "已导入 %s 个，跳过 %s 个，失败 %s 个"
+
+#: prefs.js:313
+#, javascript-format
+msgid "Importing… %s/%s"
+msgstr "正在导入… %s/%s"
+
+#: prefs.js:350
 msgid "Import URL"
 msgstr "导入 URL"
 
-#: prefs.js:223
+#: prefs.js:359
 msgid "Import from a QR image"
 msgstr "从二维码图片导入"
 
-#: prefs.js:235
+#: prefs.js:372
 msgid "TUN backend"
 msgstr "TUN 后端"
 
-#: prefs.js:236
+#: prefs.js:373
 msgid ""
 "The generated sing-box TUN configuration is passed to this command. sing-box "
 "needs permission to create a TUN device and change routes."
@@ -180,33 +224,33 @@ msgstr ""
 "启动连接时，扩展会生成 sing-box TUN 配置并传给此命令。需要 sing-box 具备创建 "
 "TUN 和修改路由的权限。"
 
-#: prefs.js:239
+#: prefs.js:376
 msgid "Start command"
 msgstr "启动命令"
 
-#: prefs.js:247
+#: prefs.js:384
 msgid "Start command saved"
 msgstr "启动命令已保存"
 
-#: prefs.js:262
+#: prefs.js:399
 msgid "QR images need the zbarimg tool: install the zbar-tools package"
 msgstr "二维码导入需要 zbarimg 工具：请安装 zbar-tools 包"
 
-#: prefs.js:266
+#: prefs.js:403
 msgid "Choose a QR code image"
 msgstr "选择二维码图片"
 
-#: prefs.js:284
+#: prefs.js:421
 #, javascript-format
 msgid "Could not run zbarimg: %s"
 msgstr "无法运行 zbarimg：%s"
 
-#: prefs.js:293
+#: prefs.js:430
 #, javascript-format
 msgid "Could not read the QR image: %s"
 msgstr "无法读取二维码图片：%s"
 
-#: prefs.js:299
+#: prefs.js:436
 msgid "No QR code was found in that image"
 msgstr "图片中未检测到二维码"
 
