@@ -10,9 +10,11 @@ import {
     buildSingBoxConfig,
     describeProcessFailure,
     format,
+    isValidRemoteConfig,
     parseLinks,
     sortLinks,
 } from './lib/config.js';
+import {fetchText, shutdownFetch} from './lib/fetch.js';
 
 const SCHEMA = 'org.gnome.shell.extensions.gname-shell-extension-singbox';
 
@@ -36,6 +38,7 @@ class SingBoxVpnManager {
         this._settings = settings;
         this._onChanged = onChanged;
         this._process = null;
+        this._refreshCancellable = null;
         this.activeLink = null;
     }
 
@@ -78,6 +81,43 @@ class SingBoxVpnManager {
 
         process.communicate_utf8_async(null, null, (_source, result) =>
             this._onProcessExited(process, link, result));
+
+        if (link.kind === 'profile') this._refreshProfile(link);
+    }
+
+    /**
+     * Update a subscription's cached configuration for next time.
+     *
+     * Deliberately silent: the token behind the URL is only valid for 24 hours
+     * by design, so a failed refresh is the expected steady state once it
+     * lapses, while the credentials already cached keep working. Warning about
+     * it every connect would be a permanent false alarm.
+     *
+     * The result never touches the running process — a silent reconnect is
+     * behaviour no user could explain.
+     */
+    _refreshProfile(link) {
+        this._refreshCancellable?.cancel();
+        this._refreshCancellable = new Gio.Cancellable();
+
+        fetchText(link.url, this._refreshCancellable, (text, error) => {
+            if (error !== null) return;
+
+            const result = isValidRemoteConfig(text);
+            if (!result.ok) return;
+
+            const links = parseLinks(this._settings.get_string('links'));
+            const index = links.findIndex(item => item.id === link.id);
+            // The entry may have been deleted while the request was in flight.
+            if (index === -1) return;
+
+            links[index] = {
+                ...links[index],
+                config: result.config,
+                fetchedAt: GLib.DateTime.new_now_utc().format_iso8601(),
+            };
+            this._settings.set_string('links', JSON.stringify(links));
+        });
     }
 
     stop() {
@@ -96,6 +136,10 @@ class SingBoxVpnManager {
     }
 
     destroy() {
+        this._refreshCancellable?.cancel();
+        this._refreshCancellable = null;
+        shutdownFetch();
+
         if (this._process) {
             try {
                 this._process.force_exit();
