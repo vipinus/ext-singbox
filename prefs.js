@@ -133,9 +133,6 @@ export default class SingBoxPreferences extends ExtensionPreferences {
             title: _('Country or region'),
             model: Gtk.StringList.new(COUNTRY_ORDER),
         });
-        importGroup.add(urlRow);
-        importGroup.add(nameRow);
-        importGroup.add(flagRow);
 
         const storeLink = entry => {
             saveLinks(settings, [...readLinks(settings), entry]);
@@ -219,7 +216,7 @@ export default class SingBoxPreferences extends ExtensionPreferences {
         // 后者意味着导过一次之后，批量导入不需要用户再提供任何东西——而这正是
         // 常见场景：先扫一个码试通了，再想把其余地区补齐。
         const bulkButton = new Gtk.Button({
-            label: _('Import all from anyfq.com'),
+            label: _('Import'),
             halign: Gtk.Align.END,
             valign: Gtk.Align.CENTER,
         });
@@ -254,7 +251,7 @@ export default class SingBoxPreferences extends ExtensionPreferences {
 
             const finish = message => {
                 bulkButton.sensitive = true;
-                bulkButton.label = _('Import all from anyfq.com');
+                bulkButton.label = _('Import');
                 refresh();
                 toast(message);
             };
@@ -345,6 +342,19 @@ export default class SingBoxPreferences extends ExtensionPreferences {
         };
 
         bulkButton.connect('clicked', bulkImport);
+        bulkButton.add_css_class('suggested-action');
+
+        const bulkRow = new Adw.ActionRow({
+            title: _('Import all from anyfq.com'),
+            subtitle: _('Fetches every region at once, skipping the ones you already have'),
+        });
+        bulkRow.add_suffix(bulkButton);
+        // 整行可点，不用非得瞄准按钮
+        bulkRow.activatable_widget = bulkButton;
+        importGroup.add(bulkRow);
+        importGroup.add(urlRow);
+        importGroup.add(nameRow);
+        importGroup.add(flagRow);
 
         const importButton = new Gtk.Button({
             label: _('Import URL'),
@@ -363,7 +373,6 @@ export default class SingBoxPreferences extends ExtensionPreferences {
         qrButton.connect('clicked', () => this._importFromQrImage(window, addUrl, toast));
 
         const buttonRow = new Adw.ActionRow();
-        buttonRow.add_suffix(bulkButton);
         buttonRow.add_suffix(qrButton);
         buttonRow.add_suffix(importButton);
         importGroup.add(buttonRow);
