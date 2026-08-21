@@ -1,6 +1,8 @@
 import GLib from 'gi://GLib';
 
 import {
+    accountInConfig,
+    accountOf,
     buildSingBoxConfig,
     describeProcessFailure,
     format,
@@ -10,6 +12,7 @@ import {
     isValidRemoteConfig,
     parseLinks,
     parseProxyUrl,
+    maskAccount,
     parseRemoteProfileLink,
     regionKeyOf,
     sortLinks,
@@ -383,6 +386,29 @@ test('an undecidable entry yields no dedupe key', () => {
     assertEqual(regionKeyOf({url: 'hysteria2://u:p@localhost:8443/'}), null);
     assertEqual(regionKeyOf(null), null);
     assertEqual(regionKeyOf({}), null);
+});
+
+
+test('the account is read from the embedded credential', () => {
+    const cfg = {outbounds: [
+        {type: 'hysteria2', password: 'Someone@Example.com:secret'},
+        {type: 'direct'},
+    ]};
+    assertEqual(accountInConfig(cfg), 'someone@example.com');
+    assertEqual(accountOf({config: cfg}), 'someone@example.com');
+});
+
+test('entries without a cached configuration have no account', () => {
+    // 手工加的分享链接就是这种：能连，但扩展看不出它属于谁
+    assertEqual(accountOf({url: 'hysteria2://a@b:443'}), null);
+    assertEqual(accountInConfig(null), null);
+    assertEqual(accountInConfig({outbounds: [{type: 'direct'}]}), null);
+});
+
+test('accounts are masked before being shown', () => {
+    assertEqual(maskAccount('someone@example.com'), 'som***@example.com');
+    assertEqual(maskAccount('ab@x.com'), 'ab***@x.com');
+    assertEqual(maskAccount(null), '?');
 });
 
 imports.system.exit(report());

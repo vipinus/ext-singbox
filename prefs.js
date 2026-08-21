@@ -11,7 +11,10 @@ import {
     isRemoteProfileUrl,
     isSupportedUrl,
     isValidRemoteConfig,
+    accountInConfig,
+    accountOf,
     localeTag,
+    maskAccount,
     parseRemoteProfileLink,
     regionKeyOf,
     subscriptionsUrl,
@@ -33,6 +36,44 @@ function readLinks(settings) {
 
 function saveLinks(settings, links) {
     settings.set_string('links', JSON.stringify(links));
+}
+
+/**
+ * 换账号确认框。
+ *
+ * ⚠️ 用能力探测而不是直接用 Adw.AlertDialog：metadata.json 声明支持 GNOME 45，
+ * 而 AlertDialog 是 libadwaita 1.5（GNOME 46）才有的。写死它会让 45 上一点按钮
+ * 就抛异常——而首选项窗口的异常不会显示给用户，表现成「点了没反应」。
+ */
+function confirmReplace(window, others, incoming, onConfirm, onCancel) {
+    const REPLACE = 'replace';
+    const heading = _('These subscriptions belong to a different account');
+    const body = format(
+        _('The %s subscriptions already here belong to %s, but this import belongs to %s. Replace them?'),
+        String(others.length), maskAccount(accountOf(others[0])), maskAccount(incoming));
+
+    if (Adw.AlertDialog) {
+        const dialog = new Adw.AlertDialog({heading, body});
+        dialog.add_response('cancel', _('Cancel'));
+        dialog.add_response(REPLACE, _('Replace'));
+        dialog.set_response_appearance(REPLACE, Adw.ResponseAppearance.DESTRUCTIVE);
+        dialog.set_default_response('cancel');
+        dialog.set_close_response('cancel');
+        dialog.connect('response', (_dialog, response) =>
+            response === REPLACE ? onConfirm() : onCancel());
+        dialog.present(window);
+        return;
+    }
+
+    const dialog = new Adw.MessageDialog({transient_for: window, modal: true, heading, body});
+    dialog.add_response('cancel', _('Cancel'));
+    dialog.add_response(REPLACE, _('Replace'));
+    dialog.set_response_appearance(REPLACE, Adw.ResponseAppearance.DESTRUCTIVE);
+    dialog.set_default_response('cancel');
+    dialog.set_close_response('cancel');
+    dialog.connect('response', (_dialog, response) =>
+        response === REPLACE ? onConfirm() : onCancel());
+    dialog.present();
 }
 
 const LinkRow = GObject.registerClass(
@@ -232,6 +273,11 @@ export default class SingBoxPreferences extends ExtensionPreferences {
                     // 链接坏了就当没提供，下面会退回已有条目
                 }
             }
+            // 深链之外，也接受直接粘贴的配置 URL：用户手里明明已经有令牌，
+            // 却因为格式不是深链而被挡回去，说不通。
+            if (!configUrl && typed.startsWith('https://') && /[?&]token=/.test(typed))
+                configUrl = typed;
+
             if (!configUrl) {
                 const existing = readLinks(settings).find(link => link.kind === 'profile' && link.url);
                 if (existing) configUrl = existing.url;
@@ -279,65 +325,106 @@ export default class SingBoxPreferences extends ExtensionPreferences {
                     return;
                 }
 
-                // 按地区去重，而不是按 URL——令牌每 24 小时轮换，
-                // 按 URL 比对会让每次批量导入都多出一整套地区。
-                const known = new Set(readLinks(settings).map(regionKeyOf).filter(Boolean));
-                const wanted = list.filter(entry =>
-                    entry && entry.url && !known.has(String(entry.region || '').toLowerCase()));
-
-                const skipped = list.length - wanted.length;
-                if (wanted.length === 0) {
-                    finish(format(_('Nothing to import: all %s regions are already here'),
-                        String(list.length)));
-                    return;
-                }
-
-                const added = [];
-                let failed = 0;
-
-                // 串行抓取。并行会同时开 24 条 TLS 连接去打同一台机器，
-                // 对一个一次性操作来说没必要，也更难在中途报进度。
-                const step = index => {
-                    if (index >= wanted.length) {
-                        if (added.length > 0)
-                            saveLinks(settings, [...readLinks(settings), ...added]);
-                        finish(format(_('Imported %s, skipped %s, failed %s'),
-                            String(added.length), String(skipped), String(failed)));
+                // 先抓一份配置，探出这批订阅属于哪个账号。
+                //
+                // 多花一次请求，换来的是「换账号时不会静默用错凭据」。不做这件事的
+                // 后果用户完全看不出来：令牌取自列表里第一条订阅（可能是旧账号），
+                // 或者就算令牌对了，按地区去重也会让 24 个地区全被跳过，界面显示
+                // 「无需导入」而实际连的还是旧账号——直到过期才发现，且无从排查。
+                //
+                // 这次探测同时也验证了令牌确实有效，失败在这里就能说清楚。
+                bulkButton.label = _('Checking the account…');
+                fetchText(list[0].url, importCancellable, (probeBody, probeError) => {
+                    if (probeError !== null) {
+                        finish(format(_('Could not fetch the region list: %s'), probeError));
+                        return;
+                    }
+                    const probe = isValidRemoteConfig(probeBody);
+                    if (!probe.ok) {
+                        finish(format(_('The subscription did not return a usable configuration: %s'),
+                            probe.error));
                         return;
                     }
 
-                    const entry = wanted[index];
-                    bulkButton.label = format(_('Importing… %s/%s'),
-                        String(index + 1), String(wanted.length));
+                    const incoming = accountInConfig(probe.config);
+                    const others = readLinks(settings).filter(link =>
+                        link.kind === 'profile' && accountOf(link) && accountOf(link) !== incoming);
 
-                    fetchText(entry.url, importCancellable, (body, fetchError) => {
-                        // 单个地区失败不该让整批停下：换个地区往往就好了，
-                        // 而已经抓到的那些对用户是有价值的。
-                        if (fetchError !== null) {
-                            failed += 1;
-                            step(index + 1);
+                    if (incoming && others.length > 0) {
+                        confirmReplace(window, others, incoming,
+                            () => run(others),
+                            () => finish(_('Import cancelled')));
+                        return;
+                    }
+                    run([]);
+                });
+
+                function run(toRemove) {
+                    const removed = new Set(toRemove.map(link => link.id));
+                    const remaining = readLinks(settings).filter(link => !removed.has(link.id));
+
+                    // 按地区去重，而不是按 URL——令牌每 24 小时轮换，
+                    // 按 URL 比对会让每次批量导入都多出一整套地区。
+                    const known = new Set(remaining.map(regionKeyOf).filter(Boolean));
+                    const wanted = list.filter(entry =>
+                        entry && entry.url && !known.has(String(entry.region || '').toLowerCase()));
+
+                    const skipped = list.length - wanted.length;
+                    if (wanted.length === 0) {
+                        // 确认过替换的话，旧账号的条目仍然要删掉
+                        if (toRemove.length > 0) saveLinks(settings, remaining);
+                        finish(format(_('Nothing to import: all %s regions are already here'),
+                            String(list.length)));
+                        return;
+                    }
+
+                    const added = [];
+                    let failed = 0;
+
+                    // 串行抓取。并行会同时开 24 条 TLS 连接去打同一台机器，
+                    // 对一个一次性操作来说没必要，也更难在中途报进度。
+                    const step = index => {
+                        if (index >= wanted.length) {
+                            if (added.length > 0 || toRemove.length > 0)
+                                saveLinks(settings, [...remaining, ...added]);
+                            finish(format(_('Imported %s, skipped %s, failed %s'),
+                                String(added.length), String(skipped), String(failed)));
                             return;
                         }
-                        const result = isValidRemoteConfig(body);
-                        if (!result.ok) {
-                            failed += 1;
+
+                        const entry = wanted[index];
+                        bulkButton.label = format(_('Importing… %s/%s'),
+                            String(index + 1), String(wanted.length));
+
+                        fetchText(entry.url, importCancellable, (body, fetchError) => {
+                            // 单个地区失败不该让整批停下：换个地区往往就好了，
+                            // 而已经抓到的那些对用户是有价值的。
+                            if (fetchError !== null) {
+                                failed += 1;
+                                step(index + 1);
+                                return;
+                            }
+                            const result = isValidRemoteConfig(body);
+                            if (!result.ok) {
+                                failed += 1;
+                                step(index + 1);
+                                return;
+                            }
+                            added.push({
+                                id: GLib.uuid_string_random(),
+                                kind: 'profile',
+                                name: entry.name || String(entry.region || '').toUpperCase(),
+                                flag: entry.flag || '🔗',
+                                url: entry.url,
+                                config: result.config,
+                                fetchedAt: GLib.DateTime.new_now_utc().format_iso8601(),
+                            });
                             step(index + 1);
-                            return;
-                        }
-                        added.push({
-                            id: GLib.uuid_string_random(),
-                            kind: 'profile',
-                            name: entry.name || String(entry.region || '').toUpperCase(),
-                            flag: entry.flag || '🔗',
-                            url: entry.url,
-                            config: result.config,
-                            fetchedAt: GLib.DateTime.new_now_utc().format_iso8601(),
                         });
-                        step(index + 1);
-                    });
-                };
+                    };
 
-                step(0);
+                    step(0);
+                }
             });
         };
 
