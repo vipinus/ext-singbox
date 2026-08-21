@@ -6,7 +6,6 @@ import {
     buildSingBoxConfig,
     describeProcessFailure,
     format,
-    flagRank,
     isRemoteProfileUrl,
     isSupportedUrl,
     isValidRemoteConfig,
@@ -308,19 +307,26 @@ test('a json array is rejected', () => {
 
 suite('link list handling');
 
-test('an unknown flag sorts after every known country', () => {
-    assert(flagRank('\u{1F1F3}\u{1F1F1}') > flagRank('\u{1F1E6}\u{1F1FA}'),
-        'unknown flags belong at the end');
-});
-
-test('links are ordered by country and then by name', () => {
+test('links are ordered by name, not by a curated country order', () => {
+    // 曾经第一顺位是人工排的热门顺序，于是 Amsterdam 被排在 LA 后面
     const sorted = sortLinks([
         {flag: '\u{1F1FA}\u{1F1F8}', name: 'LA'},
         {flag: '\u{1F1F3}\u{1F1F1}', name: 'Amsterdam'},
         {flag: '\u{1F1ED}\u{1F1F0}', name: 'HK 02'},
         {flag: '\u{1F1ED}\u{1F1F0}', name: 'HK 01'},
     ]).map(l => l.name);
-    assertEqual(sorted, ['HK 01', 'HK 02', 'LA', 'Amsterdam']);
+    assertEqual(sorted, ['Amsterdam', 'HK 01', 'HK 02', 'LA']);
+});
+
+test('same-name entries keep a stable order', () => {
+    // 两个账号各有一个「美国」时，没有稳定的次级键会让它们每次重建菜单都换位置
+    const mk = (account, id) => ({
+        name: 'US', id,
+        config: {outbounds: [{type: 'hysteria2', password: `${account}:pw`}]},
+    });
+    const once = sortLinks([mk('b@x.com', '2'), mk('a@x.com', '1')]);
+    assertEqual(once.map(l => l.id), ['1', '2']);
+    assertEqual(sortLinks(once).map(l => l.id), ['1', '2']);
 });
 
 test('malformed stored json yields an empty list', () => {
