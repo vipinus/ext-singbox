@@ -35,8 +35,31 @@
 
 1. **注销重新登录后，点快捷设置里的订阅条目连接。** profile 分支的 `_writeConfig`
    至今没有被任何人真正执行过，只做过代码审查和离线逻辑验证。
-2. **用一张没过期的新二维码走完整导入。** 抓取 → 校验 → 落库 → 连接 → 后台刷新
-   这条端到端链路整体没跑过。二维码里的 token 只有 24 小时有效期。
+2. **用一张没过期的新二维码走完整导入的后半截。** 前半截已在 2026-08-21 用一张真实
+   未过期的二维码（🇺🇸 美国）实测走通，见下方「二维码实测」；剩下**落库 → 连接 →
+   后台刷新**三步仍需在真实会话里跑，它们都要 GSettings 与 gnome-shell 在场。
+
+### 二维码实测（2026-08-21）
+
+拿站点导出的真实二维码 `ViPiN-US.png` 跑了导入链路里所有不依赖 GNOME 的环节，
+用的都是 `lib/config.js` 里的**同一份函数**，不是另写的等价实现：
+
+| 环节 | 结果 |
+|---|---|
+| 二维码解码（zbar 与 opencv 各一次，结果一致） | ✅ `sing-box://import-remote-profile` |
+| `parseRemoteProfileLink` 取内层 URL | ✅ |
+| fragment 自动填充 | ✅ `flag: 🇺🇸`、`name: 美国` —— 深链契约成立 |
+| 抓取内层 URL | ✅ HTTP 200，1538 字节 |
+| `isValidRemoteConfig` | ✅ `ok: true`，`outbounds: hysteria2, direct` |
+| 真实 `sing-box check`（1.13.19） | ✅ 通过 |
+| 真实响应 vs `tests/fixtures/anyfq-uk.json` 的键路径 | ✅ **42 : 42，两边差集均为空** |
+
+最后一行是这次最有价值的一条：它证明 fixture **此刻没有相对服务端漂移**，
+也就是上面担心的「测试继续绿、线上会坏」目前不成立。服务端下发的 `dns.servers`
+已是 1.12+ 的 `type: udp` 写法，与 fixture 一致。
+
+⚠️ 这条比对是**某一时刻的快照**，不是一道会自动报警的闸门。服务端下次改
+`src/lib/singbox.ts` 的结构时，仍然必须手工同步这份 fixture。
 
 ⚠️ **GJS 缓存 ESM 模块**：改完 `extension.js` 后 `gnome-extensions disable/enable`
 **不会重新加载代码**，Wayland 下必须注销重新登录。症状是「改了没生效」，极容易误判成
