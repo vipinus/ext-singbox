@@ -12,8 +12,11 @@ if [ -z "$SING_BOX" ] || [ ! -x "$SING_BOX" ]; then
     exit 1
 fi
 
-printf '%s\n' '需要系统授权：加载 tun 模块并授予 sing-box 网络管理能力。'
-pkexec "$PROJECT_DIR/scripts/privileged-setup.sh" "$SING_BOX"
+# 这是整个安装过程唯一一次要密码。它一并把连接/断开时的密码弹窗也免掉了——
+# 详见 scripts/privileged-setup.sh 里那段说明，包括免密授权范围的取舍。
+# 第二个参数是给 pkexec 没设 PKEXEC_UID 时兜底用的（例如改用 sudo 运行）。
+printf '%s\n' '需要系统授权：加载 tun 模块、授予 sing-box 网络管理能力，并免去连接时的密码弹窗。'
+pkexec "$PROJECT_DIR/scripts/privileged-setup.sh" "$SING_BOX" "$(id -un)"
 
 rm -rf "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/schemas" "$INSTALL_DIR/lib" "$INSTALL_DIR/icons"

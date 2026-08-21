@@ -23,9 +23,37 @@ format introduced in that release.
 ./install.sh
 ```
 
-安装脚本会通过 `pkexec` 请求一次系统授权，自动执行 `modprobe tun`，并为 sing-box
-设置 `CAP_NET_ADMIN` 和 `CAP_NET_RAW`。扩展本身始终以当前用户运行，不会以 root 运行。
-脚本同时会编译 GSettings schema 并安装翻译。
+安装脚本会通过 `pkexec` 请求一次系统授权，做三件事：`modprobe tun`、给 sing-box
+设置 `CAP_NET_ADMIN` 与 `CAP_NET_RAW`、安装一条 polkit 规则。扩展与 sing-box
+始终以当前用户运行，不会以 root 运行。脚本同时会编译 GSettings schema 并安装翻译。
+
+### 那条 polkit 规则是干什么的
+
+sing-box 要通过 DBus 让 systemd-resolved 把 DNS 指进隧道。resolve1 的每个方法都是
+独立的 polkit action，默认全是 `auth_admin_keep`——而「记住」是**按 action 记**的，
+所以几个方法记不住彼此。实测的结果是**连接弹三次密码、断开再弹一次**：
+
+| 时机 | sing-box 调的方法 | polkit action |
+|---|---|---|
+| 连接 | `SetLinkDomains` | `set-domains` |
+| 连接 | `SetLinkDefaultRoute` | `set-default-route` |
+| 连接 | `SetLinkDNS` | `set-dns-servers` |
+| 断开 | `RevertLink` | `revert` |
+
+`/etc/polkit-1/rules.d/50-singbox-resolved.rules` 在安装时一次性放行这些，之后连断
+都不再要密码。
+
+⚠️ **授权范围要如实知道**：polkit 规则拿不到调用方的程序路径（Subject 对象没有 `exe`
+属性），所以**无法只放行 sing-box**。放行的是「安装它的那个用户，在本地活动会话里，
+可以免密配置网卡 DNS」——以该用户身份运行的任何进程都能用，包括把任意网卡的 DNS
+指向攻击者的解析器。不接受这个代价就删掉该文件，代价是弹窗回来：
+
+```sh
+sudo rm /etc/polkit-1/rules.d/50-singbox-resolved.rules
+```
+
+规则的授权范围由 `tests/run.sh` 锁住：放行的 action 集合、限定单一用户、要求本地活动
+会话，三者任一被改宽测试就红。
 
 也可以使用 Meson 安装到用户目录：
 

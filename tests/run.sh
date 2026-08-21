@@ -53,6 +53,54 @@ else
     printf 'msgfmt not found, skipping\n'
 fi
 
+step 'Privileged setup script'
+# privileged-setup.sh 是唯一一个动系统安全策略的文件。它写进 /etc/polkit-1 的
+# 那条规则决定了「谁能免密改 DNS」，所以这里锁死它的授权范围：语法要能过，
+# 范围不能在没人注意时被放宽。
+for file in install.sh scripts/privileged-setup.sh tests/run.sh; do
+    sh -n "$file" || fail "shell syntax: $file"
+done
+printf 'shell syntax OK (3 files)\n'
+
+rule=$(sed -n '/<<RULE$/,/^RULE$/p' scripts/privileged-setup.sh | sed '1d;$d' |
+    sed 's/\$TARGET_USER/testuser/')
+if [ -z "$rule" ]; then
+    fail 'could not extract the polkit rule template'
+else
+    if command -v node >/dev/null 2>&1; then
+        rule_js=$(mktemp --suffix=.js)
+        printf '%s\n' "$rule" > "$rule_js"
+        node --check "$rule_js" || fail 'the polkit rule is not valid JavaScript'
+        rm -f "$rule_js"
+    fi
+
+    # 三道护栏，缺一条这条规则就比设计的宽
+    printf '%s' "$rule" | grep -q 'subject.user !== "testuser"' ||
+        fail 'the polkit rule does not pin a single user'
+    printf '%s' "$rule" | grep -q '!subject.local || !subject.active' ||
+        fail 'the polkit rule does not require a local, active session'
+
+    # 放行的 action 必须与设计完全一致——多一个都要在这里显式改
+    granted=$(printf '%s\n' "$rule" |
+        sed -n 's/^ *case "\(org\.freedesktop\.resolve1\.[a-z0-9-]*\)":$/\1/p' | sort)
+    expected=$(printf '%s\n' \
+        org.freedesktop.resolve1.revert \
+        org.freedesktop.resolve1.set-default-route \
+        org.freedesktop.resolve1.set-dns-over-tls \
+        org.freedesktop.resolve1.set-dns-servers \
+        org.freedesktop.resolve1.set-dnssec \
+        org.freedesktop.resolve1.set-domains \
+        org.freedesktop.resolve1.set-llmnr \
+        org.freedesktop.resolve1.set-mdns | sort)
+    if [ "$granted" = "$expected" ]; then
+        printf 'polkit rule grants exactly the %s intended actions\n' \
+            "$(printf '%s\n' "$granted" | wc -l)"
+    else
+        fail 'the polkit rule grants a different set of actions than intended'
+        printf 'granted:\n%s\nexpected:\n%s\n' "$granted" "$expected" >&2
+    fi
+fi
+
 step 'Extension metadata'
 if command -v gjs >/dev/null 2>&1; then
     gjs -c 'const m = JSON.parse(new TextDecoder().decode(

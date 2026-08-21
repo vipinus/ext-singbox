@@ -35,6 +35,9 @@
 
 1. **注销重新登录后，点快捷设置里的订阅条目连接。** profile 分支的 `_writeConfig`
    至今没有被任何人真正执行过，只做过代码审查和离线逻辑验证。
+   （2026-08-21 已有一次真实连接：`singbox0` 建起来、resolved 配好、断开也正常
+   Revert，见下方「密码弹窗」一节的 journal 证据。但那次是从手工添加的节点条目连的，
+   **不是从订阅条目**，所以 profile 分支仍未走过。）
 2. **用一张没过期的新二维码走完整导入的后半截。** 前半截已在 2026-08-21 用一张真实
    未过期的二维码（🇺🇸 美国）实测走通，见下方「二维码实测」；剩下**落库 → 连接 →
    后台刷新**三步仍需在真实会话里跑，它们都要 GSettings 与 gnome-shell 在场。
@@ -64,6 +67,35 @@
 ⚠️ **GJS 缓存 ESM 模块**：改完 `extension.js` 后 `gnome-extensions disable/enable`
 **不会重新加载代码**，Wayland 下必须注销重新登录。症状是「改了没生效」，极容易误判成
 代码写错了。`prefs.js` 不受影响，每次开窗口都是新进程。
+
+## 密码弹窗（2026-08-21 已修）
+
+首次真机试用时：**连接要输三次密码，断开再输一次**。
+
+根因不在扩展代码——`stop()` 就是个 `send_signal(15)`，全仓库没有一处 pkexec。
+弹窗来自 sing-box：它以普通用户身份运行（`setcap` 只给了两个网络 capability，
+没给 root），而要通过 DBus 让 systemd-resolved 把 DNS 指进隧道。journal 的时序
+把因果钉死了，每次弹窗后面紧跟着一条 resolved 的日志：
+
+```
+10:40:13  singbox0 网卡建好                        → polkit-agent-helper@23
+10:40:22  singbox0: set search domain list to: ~.  → polkit-agent-helper@24
+10:40:26  singbox0: set default route setting: yes → polkit-agent-helper@25
+10:40:31  singbox0: set DNS server list to: …
+10:40:43  （断开，RevertLink）                      → polkit-agent-helper@26
+```
+
+resolve1 的每个方法都是独立 action，默认 `auth_admin_keep`，而「记住」按 action
+记，所以三个方法记不住彼此。
+
+**修法**：安装时写一条 polkit 规则放行这些 action。取舍与删除方法写在 README。
+选它而不是「改成 root 跑的 systemd 服务」，是因为后者虽然免密授权范围窄得多
+（只放行启停一个单元），却要把 sing-box 从非特权进程提成 root——它是直接解析
+网络对端数据的程序，root 身份的爆炸半径大得多。
+
+⚠️ 系统里没有任何给 root 开的 polkit 后门（`50-default.rules` 只定义管理员身份
+是 `unix-group:sudo`）。root 不弹窗是因为 systemd 在调 polkit 之前先查发起者
+权限、uid 0 直接判过——别把这理解成 polkit 对 root 网开一面。
 
 ## 已知的小问题（最终审查判定为可以先发）
 
