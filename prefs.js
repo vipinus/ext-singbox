@@ -105,6 +105,20 @@ class LinkRow extends Adw.ActionRow {
             activatable: false,
         });
 
+        // 所属订阅账号，摆在右侧——与快捷设置菜单里的位置一致，
+        // 两处看到的是同一个信息、同一个位置。手工加的分享链接没有缓存
+        // 配置、取不到账号，就不显示这一块（而不是显示一个空标签占位）。
+        const account = accountOf(link);
+        if (account) {
+            const tag = new Gtk.Label({
+                label: maskAccount(account),
+                valign: Gtk.Align.CENTER,
+            });
+            tag.add_css_class('dim-label');
+            tag.add_css_class('caption');
+            this.add_suffix(tag);
+        }
+
         const deleteButton = new Gtk.Button({
             icon_name: 'user-trash-symbolic',
             valign: Gtk.Align.CENTER,
