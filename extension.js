@@ -304,12 +304,24 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         // vscrollbar_policy 停在 NEVER，内容照样溢出。改成读子菜单自己的
         // max-height 与内部 box 的自然高度，open() 才会把 ScrollView 切到
         // AUTOMATIC。这段照搬自 tor-ext 的 ui/quickToggle.js，它踩过同一个坑。
-        submenu.menu.actor.set_style('max-height: 20em;');
         submenu.menu._needsScrollbar = function () {
             const [, natural] = this.box.get_preferred_height(-1);
             const maxHeight = this.actor.get_theme_node().get_max_height();
             return maxHeight >= 0 && natural >= maxHeight;
         };
+
+        // 高度按屏幕实际可用空间算，而不是写死一个 em 值。
+        //
+        // 写死 20em 在这台屏幕上仍然溢出：可用高度取决于分辨率、缩放、面板与
+        // dock 占掉多少，以及这个菜单被拉开时它自己在屏幕上的位置——没有哪个
+        // 常数能同时满足这些。改成量「这一行下沿到工作区底边」还剩多少。
+        this._fitSubmenu(submenu);
+        // rebuildMenu 每次改动都会重跑，旧的信号必须先断开：否则每次重建都多挂
+        // 一个回调，而它们还各自抓着已经销毁的 submenu 不放。
+        if (this._submenuOpenId) this.menu.disconnect(this._submenuOpenId);
+        this._submenuOpenId = this.menu.connect('open-state-changed', (_menu, open) => {
+            if (open) this._fitSubmenu(submenu);
+        });
 
         links.forEach(link => {
             const item = new PopupMenu.PopupMenuItem(`${link.flag || '🔗'}  ${link.name}`);
@@ -334,6 +346,40 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         });
 
         this._linksSection.addMenuItem(submenu);
+    }
+
+    /**
+     * 给服务器子菜单定一个不会溢出屏幕的高度上限。
+     *
+     * 量的是「子菜单那一行的下沿」到「工作区底边」之间还剩多少，再留一点边距。
+     * 工作区而非屏幕高度：面板和 dock 占掉的部分不能算进去。
+     *
+     * 拿不到位置时（菜单还没分配布局）退回一个保守的固定值——宁可短一点，
+     * 也不要溢出到屏幕外让用户看不到底下的条目。
+     */
+    _fitSubmenu(submenu) {
+        const FALLBACK = 320;
+        const MARGIN = 24;
+        const MIN = 120;
+
+        let available = FALLBACK;
+        try {
+            const actor = submenu.actor ?? submenu;
+            const [, y] = actor.get_transformed_position();
+            const monitor = Main.layoutManager.findMonitorForActor(actor)
+                ?? Main.layoutManager.primaryMonitor;
+            const workArea = Main.layoutManager.getWorkAreaForMonitor(monitor.index);
+            const rowHeight = actor.get_height() || 0;
+            const bottom = workArea.y + workArea.height;
+            // Number.isFinite 挡住未分配布局时的 NaN——那会让 max-height 变成
+            // "NaNpx"，St 解析失败后等于没有上限，症状正是溢出。
+            const computed = bottom - y - rowHeight - MARGIN;
+            if (Number.isFinite(computed)) available = computed;
+        } catch (_error) {
+            // 量不到就用保守值，不让这里的异常影响菜单本身
+        }
+
+        submenu.menu.actor.set_style(`max-height: ${Math.max(MIN, Math.round(available))}px;`);
     }
 
     /**
@@ -370,6 +416,10 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
     }
 
     destroy() {
+        if (this._submenuOpenId) {
+            this.menu.disconnect(this._submenuOpenId);
+            this._submenuOpenId = 0;
+        }
         if (this._clickedId) {
             this.disconnect(this._clickedId);
             this._clickedId = 0;
