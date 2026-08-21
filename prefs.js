@@ -6,7 +6,8 @@ import Gtk from 'gi://Gtk';
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {
-    COUNTRY_ORDER,
+    REGIONS,
+    regionLabel,
     format,
     isRemoteProfileUrl,
     isSupportedUrl,
@@ -186,7 +187,7 @@ export default class SingBoxPreferences extends ExtensionPreferences {
         const nameRow = new Adw.EntryRow({title: _('Connection name')});
         const flagRow = new Adw.ComboRow({
             title: _('Country or region'),
-            model: Gtk.StringList.new(COUNTRY_ORDER),
+            model: Gtk.StringList.new(REGIONS.map(regionLabel)),
         });
 
         const storeLink = entry => {
@@ -237,7 +238,7 @@ export default class SingBoxPreferences extends ExtensionPreferences {
                     // The deep link carries its own label; the form fields are
                     // only a fallback for links that do not.
                     name: profile.name || nameRow.text.trim() || _('Unnamed subscription'),
-                    flag: profile.flag || COUNTRY_ORDER[flagRow.selected] || '🔗',
+                    flag: profile.flag || REGIONS[flagRow.selected]?.flag || '🔗',
                     url: profile.url,
                     config: result.config,
                     fetchedAt: GLib.DateTime.new_now_utc().format_iso8601(),
@@ -259,8 +260,9 @@ export default class SingBoxPreferences extends ExtensionPreferences {
 
             storeLink({
                 id: GLib.uuid_string_random(),
-                name: nameRow.text.trim() || _('Unnamed connection'),
-                flag: COUNTRY_ORDER[flagRow.selected] || '🔗',
+                name: nameRow.text.trim() ||
+                    REGIONS[flagRow.selected]?.name || _('Unnamed connection'),
+                flag: REGIONS[flagRow.selected]?.flag || '🔗',
                 url: value,
             });
         };

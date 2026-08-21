@@ -1,6 +1,7 @@
 import GLib from 'gi://GLib';
 
 import {
+    REGIONS,
     accountInConfig,
     accountOf,
     buildSingBoxConfig,
@@ -14,6 +15,7 @@ import {
     maskAccount,
     parseRemoteProfileLink,
     regionKeyOf,
+    regionLabel,
     sortLinks,
     subscriptionsUrl,
 } from '../lib/config.js';
@@ -415,6 +417,33 @@ test('accounts are masked before being shown', () => {
     assertEqual(maskAccount('someone@example.com'), 'som***@example.com');
     assertEqual(maskAccount('ab@x.com'), 'ab***@x.com');
     assertEqual(maskAccount(null), '?');
+});
+
+
+// --- 地区表 ---------------------------------------------------------------
+
+test('the region list matches what the site offers', () => {
+    assertEqual(REGIONS.length, 24);
+    // 按英文名排序，与站点一致；乱序会让下拉里找不到东西
+    const names = REGIONS.map(r => r.name);
+    assertEqual(names, [...names].sort((a, b) => a.localeCompare(b)));
+});
+
+test('every region has a real two-codepoint flag', () => {
+    const bad = REGIONS.filter(r => [...r.flag].length !== 2);
+    assertEqual(bad.map(r => r.code), []);
+});
+
+test('the United Kingdom uses the GB flag, not one derived from its region code', () => {
+    // ⚠️ 站点的地区码是 uk，而 ISO 3166-1 里英国是 GB。按 uk 推导会得到一对
+    // 不构成国旗的码位，界面上显示成两个方块字母而不是报错——站点那边踩过。
+    const uk = REGIONS.find(r => r.code === 'uk');
+    assertEqual(uk.flag, '\u{1F1EC}\u{1F1E7}');
+});
+
+test('a region renders as flag plus name', () => {
+    assertEqual(regionLabel({flag: '\u{1F1EF}\u{1F1F5}', name: 'Japan'}),
+        '\u{1F1EF}\u{1F1F5}  Japan');
 });
 
 imports.system.exit(report());
