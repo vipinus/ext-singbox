@@ -7,7 +7,7 @@ extensiondir = join_paths(datadir, 'gnome-shell', 'extensions', uuid)
 
 install_data('metadata.json', 'extension.js', 'prefs.js',
   install_dir: extensiondir)
-install_data('lib/config.js',
+install_data('lib/config.js', 'lib/fetch.js',
   install_dir: join_paths(extensiondir, 'lib'))
 install_data('icons/singbox-symbolic.svg',
   install_dir: join_paths(extensiondir, 'icons'))

@@ -14,7 +14,7 @@ step 'Syntax check'
 if command -v node >/dev/null 2>&1; then
     scratch=$(mktemp -d)
     trap 'rm -rf "$scratch"' EXIT
-    for file in extension.js prefs.js lib/config.js tests/harness.js tests/config-test.js; do
+    for file in extension.js prefs.js lib/config.js lib/fetch.js tests/harness.js tests/config-test.js; do
         cp "$file" "$scratch/$(echo "$file" | tr '/' '_').mjs"
     done
     for file in "$scratch"/*.mjs; do

@@ -19,7 +19,7 @@ rm -rf "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/schemas" "$INSTALL_DIR/lib" "$INSTALL_DIR/icons"
 
 cp "$PROJECT_DIR/metadata.json" "$PROJECT_DIR/extension.js" "$PROJECT_DIR/prefs.js" "$INSTALL_DIR/"
-cp "$PROJECT_DIR/lib/config.js" "$INSTALL_DIR/lib/"
+cp "$PROJECT_DIR/lib/config.js" "$PROJECT_DIR/lib/fetch.js" "$INSTALL_DIR/lib/"
 cp "$PROJECT_DIR/icons/singbox-symbolic.svg" "$INSTALL_DIR/icons/"
 cp "$PROJECT_DIR/schemas/org.gnome.shell.extensions.$DOMAIN.gschema.xml" "$INSTALL_DIR/schemas/"
 glib-compile-schemas "$INSTALL_DIR/schemas"
