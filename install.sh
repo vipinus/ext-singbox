@@ -3,6 +3,7 @@ set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 UUID='gname-shell-extension-singbox@gnome-shell-extension'
+DOMAIN='gname-shell-extension-singbox'
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/$UUID"
 SING_BOX=${SING_BOX_BIN:-$(command -v sing-box || true)}
 
@@ -15,10 +16,23 @@ printf '%s\n' '需要系统授权：加载 tun 模块并授予 sing-box 网络�
 pkexec "$PROJECT_DIR/scripts/privileged-setup.sh" "$SING_BOX"
 
 rm -rf "$INSTALL_DIR"
-mkdir -p "$INSTALL_DIR/schemas"
-cp "$PROJECT_DIR/metadata.json" "$PROJECT_DIR/extension.js" "$PROJECT_DIR/prefs.js" "$PROJECT_DIR/stylesheet.css" "$INSTALL_DIR/"
-cp "$PROJECT_DIR/schemas/org.gnome.shell.extensions.gname-shell-extension-singbox.gschema.xml" "$INSTALL_DIR/schemas/"
+mkdir -p "$INSTALL_DIR/schemas" "$INSTALL_DIR/lib" "$INSTALL_DIR/icons"
+
+cp "$PROJECT_DIR/metadata.json" "$PROJECT_DIR/extension.js" "$PROJECT_DIR/prefs.js" "$INSTALL_DIR/"
+cp "$PROJECT_DIR/lib/config.js" "$INSTALL_DIR/lib/"
+cp "$PROJECT_DIR/icons/singbox-symbolic.svg" "$INSTALL_DIR/icons/"
+cp "$PROJECT_DIR/schemas/org.gnome.shell.extensions.$DOMAIN.gschema.xml" "$INSTALL_DIR/schemas/"
 glib-compile-schemas "$INSTALL_DIR/schemas"
+
+if command -v msgfmt >/dev/null 2>&1; then
+    while read -r lang; do
+        [ -n "$lang" ] || continue
+        mkdir -p "$INSTALL_DIR/locale/$lang/LC_MESSAGES"
+        msgfmt "$PROJECT_DIR/po/$lang.po" -o "$INSTALL_DIR/locale/$lang/LC_MESSAGES/$DOMAIN.mo"
+    done < "$PROJECT_DIR/po/LINGUAS"
+else
+    printf '%s\n' '未找到 msgfmt，跳过翻译安装（界面将显示英文）。' >&2
+fi
 
 printf '已安装到 %s\n' "$INSTALL_DIR"
 printf '%s\n' '请注销并重新登录，或在 GNOME Shell 中重启扩展后启用：'

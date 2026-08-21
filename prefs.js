@@ -1,19 +1,19 @@
 import Adw from 'gi://Adw';
-import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
-import Gdk from 'gi://Gdk';
-import ExtensionPreferences from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import Gtk from 'gi://Gtk';
+import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+
+import {COUNTRY_ORDER, format, isSupportedUrl, sortLinks} from './lib/config.js';
 
 const SCHEMA = 'org.gnome.shell.extensions.gname-shell-extension-singbox';
-const COUNTRY_ORDER = ['🇭🇰', '🇸🇬', '🇯🇵', '🇰🇷', '🇺🇸', '🇬🇧', '🇩🇪', '🇫🇷', '🇨🇦', '🇦🇺'];
 
 function readLinks(settings) {
     try {
         const links = JSON.parse(settings.get_string('links'));
         return Array.isArray(links) ? links : [];
-    } catch (_) {
+    } catch (_error) {
         return [];
     }
 }
@@ -25,108 +25,183 @@ function saveLinks(settings, links) {
 const LinkRow = GObject.registerClass(
 class LinkRow extends Adw.ActionRow {
     _init(link, onDelete) {
-        super._init({title: `${link.flag || '🔗'}  ${link.name}`, subtitle: link.url, activatable: false});
-        const deleteButton = new Gtk.Button({icon_name: 'user-trash-symbolic', valign: Gtk.Align.CENTER, tooltip_text: '删除连接'});
+        super._init({
+            title: GLib.markup_escape_text(`${link.flag || '🔗'}  ${link.name}`, -1),
+            subtitle: GLib.markup_escape_text(link.url || '', -1),
+            subtitle_lines: 1,
+            activatable: false,
+        });
+
+        const deleteButton = new Gtk.Button({
+            icon_name: 'user-trash-symbolic',
+            valign: Gtk.Align.CENTER,
+            tooltip_text: _('Delete this connection'),
+        });
         deleteButton.add_css_class('flat');
         deleteButton.connect('clicked', onDelete);
         this.add_suffix(deleteButton);
     }
 });
 
-export default class RingBoxPreferences extends ExtensionPreferences {
+export default class SingBoxPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         window.set_default_size(720, 640);
-        const settings = this.getSettings(SCHEMA);
 
-        const page = new Adw.PreferencesPage({title: 'sing-box', icon_name: 'network-vpn-symbolic'});
-        const intro = new Adw.PreferencesGroup({title: '连接列表', description: '通过 URL 或二维码导入 sing-box 连接，列表按国家/地区排序。'});
+        const settings = this.getSettings(SCHEMA);
+        const toast = message => window.add_toast(new Adw.Toast({title: message, timeout: 3}));
+
+        const page = new Adw.PreferencesPage({
+            title: 'sing-box',
+            icon_name: 'network-vpn-symbolic',
+        });
+
+        const listGroup = new Adw.PreferencesGroup({
+            title: _('Connections'),
+            description: _('Import sing-box connections from a URL or a QR code. The list is ordered by country.'),
+        });
         const rows = new Gtk.ListBox({selection_mode: Gtk.SelectionMode.NONE});
         rows.add_css_class('boxed-list');
-        intro.add(rows);
+        listGroup.add(rows);
 
-        const importGroup = new Adw.PreferencesGroup({title: '导入连接'});
-        const urlEntry = new Gtk.Entry({placeholder_text: '粘贴 vless://、vmess://、trojan://、ss:// 或 hysteria2://', hexpand: true});
-        const nameEntry = new Gtk.Entry({placeholder_text: '名称，例如 Tokyo 01', hexpand: true});
-        const flagDrop = new Gtk.DropDown({model: Gtk.StringList.new(COUNTRY_ORDER)});
-        flagDrop.set_tooltip_text('选择连接国家或地区');
-        const urlRow = new Adw.ActionRow({title: '连接 URL'});
-        urlRow.add_suffix(urlEntry);
-        const nameRow = new Adw.ActionRow({title: '连接名称'});
-        nameRow.add_suffix(nameEntry);
-        const flagRow = new Adw.ActionRow({title: '国家/地区'});
-        flagRow.add_suffix(flagDrop);
+        const refresh = () => {
+            while (rows.get_first_child())
+                rows.remove(rows.get_first_child());
+
+            const links = sortLinks(readLinks(settings));
+            links.forEach(link => rows.append(new LinkRow(link, () => {
+                saveLinks(settings, readLinks(settings).filter(item => item.id !== link.id));
+                refresh();
+                toast(_('Connection deleted'));
+            })));
+
+            if (links.length === 0) {
+                rows.append(new Adw.ActionRow({
+                    title: _('No connections yet'),
+                    subtitle: _('Paste a URL below, or pick a QR code image'),
+                }));
+            }
+        };
+
+        const importGroup = new Adw.PreferencesGroup({title: _('Import a connection')});
+
+        const urlRow = new Adw.EntryRow({title: _('Connection URL')});
+        const nameRow = new Adw.EntryRow({title: _('Connection name')});
+        const flagRow = new Adw.ComboRow({
+            title: _('Country or region'),
+            model: Gtk.StringList.new(COUNTRY_ORDER),
+        });
         importGroup.add(urlRow);
         importGroup.add(nameRow);
         importGroup.add(flagRow);
 
-        const importButton = new Gtk.Button({label: '导入 URL', icon_name: 'list-add-symbolic', halign: Gtk.Align.END});
+        const addUrl = url => {
+            const value = (url || '').trim();
+            if (!value || !isSupportedUrl(value)) {
+                toast(_('That is not a supported sing-box share link'));
+                return;
+            }
+
+            saveLinks(settings, [...readLinks(settings), {
+                id: GLib.uuid_string_random(),
+                name: nameRow.text.trim() || _('Unnamed connection'),
+                flag: COUNTRY_ORDER[flagRow.selected] || '🔗',
+                url: value,
+            }]);
+
+            urlRow.text = '';
+            nameRow.text = '';
+            refresh();
+            toast(_('Connection imported'));
+        };
+
+        const importButton = new Gtk.Button({
+            label: _('Import URL'),
+            halign: Gtk.Align.END,
+            valign: Gtk.Align.CENTER,
+        });
         importButton.add_css_class('suggested-action');
-        const qrButton = new Gtk.Button({label: '从二维码图片导入', icon_name: 'camera-photo-symbolic', halign: Gtk.Align.END});
+        importButton.connect('clicked', () => addUrl(urlRow.text));
+        urlRow.connect('entry-activated', () => addUrl(urlRow.text));
+
+        const qrButton = new Gtk.Button({
+            label: _('Import from a QR image'),
+            halign: Gtk.Align.END,
+            valign: Gtk.Align.CENTER,
+        });
+        qrButton.connect('clicked', () => this._importFromQrImage(window, addUrl, toast));
+
         const buttonRow = new Adw.ActionRow();
         buttonRow.add_suffix(qrButton);
         buttonRow.add_suffix(importButton);
         importGroup.add(buttonRow);
 
         const backendGroup = new Adw.PreferencesGroup({
-            title: 'TUN 后端',
-            description: '启动连接时，扩展会生成 sing-box TUN 配置并传给此命令。需要 sing-box 具备创建 TUN 和修改路由的权限。',
+            title: _('TUN backend'),
+            description: _('The generated sing-box TUN configuration is passed to this command. sing-box needs permission to create a TUN device and change routes.'),
         });
-        const backendEntry = new Gtk.Entry({text: settings.get_string('backend-command'), hexpand: true});
-        backendEntry.connect('changed', entry => settings.set_string('backend-command', entry.text));
-        const backendRow = new Adw.ActionRow({title: '启动命令'});
-        backendRow.add_suffix(backendEntry);
+        const backendRow = new Adw.EntryRow({
+            title: _('Start command'),
+            text: settings.get_string('backend-command'),
+            show_apply_button: true,
+        });
+        // Applied on Enter or via the apply button, so a half-typed command is
+        // never written to GSettings.
+        backendRow.connect('apply', row => {
+            settings.set_string('backend-command', row.text.trim());
+            toast(_('Start command saved'));
+        });
         backendGroup.add(backendRow);
 
-        const toast = message => window.add_toast(new Adw.Toast({title: message, timeout: 3}));
-        const refresh = () => {
-            while (rows.get_first_child()) rows.remove(rows.get_first_child());
-            const links = readLinks(settings).sort((a, b) => COUNTRY_ORDER.indexOf(a.flag) - COUNTRY_ORDER.indexOf(b.flag));
-            links.forEach(link => rows.append(new LinkRow(link, () => {
-                saveLinks(settings, readLinks(settings).filter(item => item.id !== link.id));
-                refresh();
-                toast('连接已删除');
-            })));
-            if (!links.length) {
-                const empty = new Adw.ActionRow({title: '暂无连接', subtitle: '在下方粘贴 URL，或选择二维码图片'});
-                rows.append(empty);
-            }
-        };
-
-        const addUrl = url => {
-            const value = url.trim();
-            if (!value || !/^(vless|vmess|trojan|ss|hysteria2|hy2):\/\//.test(value)) {
-                toast('请输入有效的 sing-box 分享链接');
-                return;
-            }
-            const links = readLinks(settings);
-            links.push({id: GLib.uuid_string_random(), name: nameEntry.text.trim() || '未命名连接', flag: COUNTRY_ORDER[flagDrop.selected] || '🔗', url: value});
-            saveLinks(settings, links);
-            urlEntry.text = '';
-            nameEntry.text = '';
-            refresh();
-            toast('连接已导入');
-        };
-        importButton.connect('clicked', () => addUrl(urlEntry.text));
-
-        qrButton.connect('clicked', () => {
-            const dialog = new Gtk.FileDialog({title: '选择二维码图片'});
-            dialog.open(window, null, (source, result) => {
-                try {
-                    const file = source.open_finish(result);
-                    const path = file.get_path();
-                    const [, stdout, , status] = GLib.spawn_command_line_sync(`zbarimg --quiet ${GLib.shell_quote(path)}`);
-                    if (status === 0 && stdout) addUrl(new TextDecoder().decode(stdout).split('\n')[0].replace(/^QR-Code:/, ''));
-                    else toast('未检测到二维码，请安装 zbarimg');
-                } catch (error) {
-                    if (!error.matches?.(Gtk.dialog_error_quark?.() ?? 0, Gtk.DialogError.DISMISSED)) toast('二维码导入已取消');
-                }
-            });
-        });
-
-        page.add(intro);
+        page.add(listGroup);
         page.add(importGroup);
         page.add(backendGroup);
         window.add(page);
         refresh();
+    }
+
+    _importFromQrImage(window, addUrl, toast) {
+        if (!GLib.find_program_in_path('zbarimg')) {
+            toast(_('zbarimg is not installed, so QR images cannot be read'));
+            return;
+        }
+
+        const dialog = new Gtk.FileDialog({title: _('Choose a QR code image')});
+        dialog.open(window, null, (source, result) => {
+            let path;
+            try {
+                path = source.open_finish(result).get_path();
+            } catch (_error) {
+                return; // The user dismissed the dialog.
+            }
+            this._readQrCode(path, addUrl, toast);
+        });
+    }
+
+    _readQrCode(path, addUrl, toast) {
+        let process;
+        try {
+            process = Gio.Subprocess.new(
+                ['zbarimg', '--quiet', '--raw', path], Gio.SubprocessFlags.STDOUT_PIPE);
+        } catch (error) {
+            toast(format(_('Could not run zbarimg: %s'), error.message));
+            return;
+        }
+
+        process.communicate_utf8_async(null, null, (proc, result) => {
+            let stdout = '';
+            try {
+                [, stdout] = proc.communicate_utf8_finish(result);
+            } catch (error) {
+                toast(format(_('Could not read the QR image: %s'), error.message));
+                return;
+            }
+
+            const payload = (stdout || '').split('\n')[0].trim();
+            if (!payload) {
+                toast(_('No QR code was found in that image'));
+                return;
+            }
+            addUrl(payload);
+        });
     }
 }

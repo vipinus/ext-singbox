@@ -1,0 +1,8 @@
+# Build output
+/build/
+
+# Compiled GSettings schemas are generated at install time
+schemas/gschemas.compiled
+
+# Compiled translations are generated from po/
+/locale/

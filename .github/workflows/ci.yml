@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GJS, gettext and sing-box
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gjs libglib2.0-bin gettext
+          # sing-box validates every generated configuration in the test suite.
+          version=$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest \
+            | grep -m1 '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
+          curl -fsSL "https://github.com/SagerNet/sing-box/releases/download/v${version}/sing-box-${version}-linux-amd64.tar.gz" \
+            | tar -xz --strip-components=1 -C /usr/local/bin "sing-box-${version}-linux-amd64/sing-box"
+          sing-box version
+
+      - name: Run checks
+        run: ./tests/run.sh
+
+      - name: Verify the translation template is up to date
+        run: |
+          xgettext --from-code=UTF-8 --language=JavaScript --keyword=_ \
+            --package-name="sing-box Link Manager" --package-version=1 \
+            --copyright-holder="sing-box Link Manager contributors" \
+            --msgid-bugs-address="https://github.com/gname/gname-shell-extension-singbox/issues" \
+            -f po/POTFILES.in -o /tmp/regenerated.pot
+          # Ignore the header, which carries a generation date.
+          if ! diff -u \
+            <(grep -v '^"POT-Creation-Date' po/gname-shell-extension-singbox.pot) \
+            <(grep -v '^"POT-Creation-Date' /tmp/regenerated.pot); then
+            echo "po/gname-shell-extension-singbox.pot is stale; re-run xgettext." >&2
+            exit 1
+          fi

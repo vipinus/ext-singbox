@@ -3,6 +3,15 @@
   "name": "sing-box Link Manager",
   "description": "Import and manage sing-box VPN links from URLs or QR images.",
   "version": 1,
-  "shell-version": ["45", "46", "47", "48", "49", "50"],
-  "url": "https://github.com/gname/gname-shell-extension-singbox"
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.gname-shell-extension-singbox",
+  "url": "https://github.com/gname/gname-shell-extension-singbox",
+  "gettext-domain": "gname-shell-extension-singbox"
 }
