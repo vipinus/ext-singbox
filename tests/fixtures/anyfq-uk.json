@@ -22,7 +22,7 @@
     {
       "type": "hysteria2",
       "tag": "proxy",
-      "server": "uk.fanq.in",
+      "server": "uk.example-vpn.net",
       "server_port": 8443,
       "server_ports": ["45000:49999"],
       "hop_interval": "30s",
@@ -30,7 +30,7 @@
       "obfs": { "type": "salamander", "password": "fake-obfs-password" },
       "up_mbps": 100,
       "down_mbps": 500,
-      "tls": { "enabled": true, "server_name": "uk.fanq.in", "insecure": true }
+      "tls": { "enabled": true, "server_name": "uk.example-vpn.net", "insecure": true }
     },
     { "type": "direct", "tag": "direct" }
   ],

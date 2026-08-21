@@ -234,7 +234,7 @@ Create `tests/fixtures/anyfq-uk.json` with exactly this content:
     {
       "type": "hysteria2",
       "tag": "proxy",
-      "server": "uk.fanq.in",
+      "server": "uk.example-vpn.net",
       "server_port": 8443,
       "server_ports": ["45000:49999"],
       "hop_interval": "30s",
@@ -242,7 +242,7 @@ Create `tests/fixtures/anyfq-uk.json` with exactly this content:
       "obfs": { "type": "salamander", "password": "fake-obfs-password" },
       "up_mbps": 100,
       "down_mbps": 500,
-      "tls": { "enabled": true, "server_name": "uk.fanq.in", "insecure": true }
+      "tls": { "enabled": true, "server_name": "uk.example-vpn.net", "insecure": true }
     },
     { "type": "direct", "tag": "direct" }
   ],
@@ -715,7 +715,7 @@ GSETTINGS_SCHEMA_DIR="$SCHEMADIR" gsettings set org.gnome.shell.extensions.gname
 Log out and back in (GJS caches ESM modules, so disable/enable does not reload
 `extension.js`). Then open Quick Settings, click **Fixture UK**, and confirm the
 notification says `Connecting to Fixture UK` rather than a configuration error.
-The connection itself will fail because `uk.fanq.in` rejects the fake credentials —
+The connection itself will fail because `uk.example-vpn.net` rejects the fake credentials —
 that is expected; what is being verified is that the cached configuration was
 written and sing-box started.
 
