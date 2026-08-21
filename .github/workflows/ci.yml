@@ -12,14 +12,34 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install GJS, gettext and sing-box
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 取不到最新版时的回退，与我们分发给用户的内核版本一致
+          FALLBACK_VERSION: '1.13.19'
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y gjs libglib2.0-bin gettext
-          # sing-box validates every generated configuration in the test suite.
-          version=$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest \
-            | grep -m1 '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
+
+          # sing-box 会验证测试里生成的每一份配置。跟随 latest 而不是钉死版本：
+          # 上游改规则导致「启动即 FATAL」是这个项目真实踩过的坑，钉死等于把
+          # 这层保护关掉。
+          #
+          # ⚠️ 必须带 token：匿名调 api.github.com 在共享 runner 上会 403。
+          # 而且原先的写法把失败吞掉了——管道的退出码取自最后一个 sed，
+          # version 变成空串后 URL 拼成 .../v/sing-box--linux-amd64.tar.gz，
+          # 报出来的是一个看不出病因的 404。
+          version=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/SagerNet/sing-box/releases/latest \
+            | grep -m1 '"tag_name"' | cut -d'"' -f4 | sed 's/^v//') || version=''
+          if [ -z "$version" ]; then
+            version="$FALLBACK_VERSION"
+            echo "::warning::取不到 sing-box 最新版本，回退到 $version"
+          fi
+          echo "using sing-box $version"
+
           curl -fsSL "https://github.com/SagerNet/sing-box/releases/download/v${version}/sing-box-${version}-linux-amd64.tar.gz" \
-            | tar -xz --strip-components=1 -C /usr/local/bin "sing-box-${version}-linux-amd64/sing-box"
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin "sing-box-${version}-linux-amd64/sing-box"
           sing-box version
 
       - name: Run checks
