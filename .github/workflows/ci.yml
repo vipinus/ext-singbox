@@ -27,15 +27,12 @@ jobs:
 
       - name: Verify the translation template is up to date
         run: |
-          xgettext --from-code=UTF-8 --language=JavaScript --keyword=_ \
-            --package-name="sing-box Link Manager" --package-version=1 \
-            --copyright-holder="sing-box Link Manager contributors" \
-            --msgid-bugs-address="https://github.com/gname/gname-shell-extension-singbox/issues" \
-            -f po/POTFILES.in -o /tmp/regenerated.pot
+          # 与本地用的是同一条命令——参数分两处存放正是这一步反复误报的原因
+          ./scripts/update-pot.sh /tmp/regenerated.pot
           # Ignore the header, which carries a generation date.
           if ! diff -u \
             <(grep -v '^"POT-Creation-Date' po/gname-shell-extension-singbox.pot) \
             <(grep -v '^"POT-Creation-Date' /tmp/regenerated.pot); then
-            echo "po/gname-shell-extension-singbox.pot is stale; re-run xgettext." >&2
+            echo "po/gname-shell-extension-singbox.pot is stale; run ./scripts/update-pot.sh" >&2
             exit 1
           fi

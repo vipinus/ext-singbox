@@ -53,6 +53,27 @@ else
     printf 'msgfmt not found, skipping\n'
 fi
 
+step 'Translation template'
+# CI 也做这项检查。放在这里是因为「推上去才发现模板过期」是纯粹的浪费——
+# 而这类失败的 diff 全是无信息的行号漂移，看一眼还以为出了大事。
+if command -v xgettext >/dev/null 2>&1; then
+    regen=$(mktemp --suffix=.pot)
+    ./scripts/update-pot.sh "$regen"
+    # 用临时文件而不是 <(...)：进程替换是 bash 语法，这个文件是 #!/bin/sh。
+    # 同一个坑在这个文件里已经踩过两次了。
+    a=$(mktemp); b=$(mktemp)
+    grep -v '^"POT-Creation-Date' po/gname-shell-extension-singbox.pot > "$a"
+    grep -v '^"POT-Creation-Date' "$regen" > "$b"
+    if diff -q "$a" "$b" >/dev/null; then
+        printf 'template is up to date\n'
+    else
+        fail 'po template is stale; run ./scripts/update-pot.sh'
+    fi
+    rm -f "$regen" "$a" "$b"
+else
+    printf 'xgettext not found, skipping\n'
+fi
+
 step 'Privileged setup script'
 # privileged-setup.sh 是唯一一个动系统安全策略的文件。它写进 /etc/polkit-1 的
 # 那条规则决定了「谁能免密改 DNS」，所以这里锁死它的授权范围：语法要能过，
