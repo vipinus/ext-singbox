@@ -7,6 +7,7 @@ import {
     flagRank,
     isRemoteProfileUrl,
     isSupportedUrl,
+    isValidRemoteConfig,
     parseLinks,
     parseProxyUrl,
     parseRemoteProfileLink,
@@ -260,6 +261,44 @@ test('a deep link with no url parameter is rejected', () => {
 
 test('remote profile links are importable', () => {
     assert(isSupportedUrl(PROFILE_LINK), 'the import field must accept deep links');
+});
+
+suite('remote configuration validation');
+
+function fixture(name) {
+    const path = GLib.build_filenamev([
+        GLib.path_get_dirname(import.meta.url.replace('file://', '')), 'fixtures', name]);
+    return new TextDecoder().decode(GLib.file_get_contents(path)[1]);
+}
+
+test('a real anyfq response is accepted', () => {
+    const result = isValidRemoteConfig(fixture('anyfq-uk.json'));
+    assert(result.ok, `expected the fixture to validate, got: ${result.error}`);
+    assertEqual(result.config.outbounds[0].type, 'hysteria2');
+});
+
+test('the anyfq response shape still passes sing-box check', () => {
+    assertValidSingBoxConfig(isValidRemoteConfig(fixture('anyfq-uk.json')).config,
+        'the configuration we actually receive must be runnable');
+});
+
+test('text that is not json is rejected', () => {
+    const result = isValidRemoteConfig('<html>login required</html>');
+    assert(!result.ok, 'an html error page is not a configuration');
+    assert(result.error.length > 0, 'a diagnostic is always needed');
+});
+
+test('json without outbounds is rejected', () => {
+    assert(!isValidRemoteConfig('{"log":{"level":"warn"}}').ok,
+        'a configuration with nowhere to send traffic is useless');
+});
+
+test('an empty outbounds array is rejected', () => {
+    assert(!isValidRemoteConfig('{"outbounds":[]}').ok, 'no outbounds means no proxy');
+});
+
+test('a json array is rejected', () => {
+    assert(!isValidRemoteConfig('[]').ok, 'the response must be an object');
 });
 
 suite('link list handling');
