@@ -10,6 +10,20 @@ status=0
 step() { printf '\n== %s\n' "$1"; }
 fail() { printf 'FAILED: %s\n' "$1" >&2; status=1; }
 
+step 'Shell syntax'
+# 排在所有步骤最前面：这个文件自己也是 sh 脚本，后面任何一步写错语法都会在
+# 执行到那一行时才炸，而且症状看起来像那一步的逻辑问题。已经误诊过一次。
+#
+# 自动发现而不是写死清单：写死的话新加的脚本会悄悄漏检——scripts/update-pot.sh
+# 就是这么加进来的。
+shell_files=$(find . -name '*.sh' -not -path './.git/*' | sort)
+shell_count=0
+for file in $shell_files; do
+    sh -n "$file" || fail "shell syntax: $file"
+    shell_count=$((shell_count + 1))
+done
+printf 'checked %s shell scripts\n' "$shell_count"
+
 step 'Syntax check'
 if command -v node >/dev/null 2>&1; then
     scratch=$(mktemp -d)
@@ -78,11 +92,6 @@ step 'Privileged setup script'
 # privileged-setup.sh 是唯一一个动系统安全策略的文件。它写进 /etc/polkit-1 的
 # 那条规则决定了「谁能免密改 DNS」，所以这里锁死它的授权范围：语法要能过，
 # 范围不能在没人注意时被放宽。
-for file in install.sh scripts/privileged-setup.sh tests/run.sh; do
-    sh -n "$file" || fail "shell syntax: $file"
-done
-printf 'shell syntax OK (3 files)\n'
-
 rule=$(sed -n '/<<RULE$/,/^RULE$/p' scripts/privileged-setup.sh | sed '1d;$d' |
     sed 's/\$TARGET_USER/testuser/')
 if [ -z "$rule" ]; then
