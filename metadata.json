@@ -1,0 +1,8 @@
+{
+  "uuid": "gname-shell-extension-singbox@gnome-shell-extension",
+  "name": "sing-box Link Manager",
+  "description": "Import and manage sing-box VPN links from URLs or QR images.",
+  "version": 1,
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/gname/gname-shell-extension-singbox"
+}

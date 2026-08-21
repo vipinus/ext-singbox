@@ -1,0 +1,46 @@
+.singbox-menu-header {
+    font-weight: 700;
+}
+
+.singbox-empty {
+    color: #9a9996;
+}
+
+.singbox-tile-grid {
+    spacing: 6px;
+    padding: 2px 0;
+}
+
+.singbox-tile-row {
+    spacing: 6px;
+}
+
+.singbox-tile {
+    width: 132px;
+    height: 72px;
+    border-radius: 8px;
+    background-color: rgba(128, 128, 128, 0.16);
+}
+
+.singbox-tile:hover,
+.singbox-tile:focus {
+    background-color: rgba(128, 128, 128, 0.28);
+}
+
+.singbox-tile.active {
+    background-color: rgba(53, 132, 228, 0.42);
+}
+
+.singbox-tile-content {
+    spacing: 4px;
+    padding: 8px;
+}
+
+.singbox-tile-flag {
+    font-size: 20px;
+}
+
+.singbox-tile-name {
+    max-width: 116px;
+    font-weight: 600;
+}
