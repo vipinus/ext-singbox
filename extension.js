@@ -62,6 +62,7 @@ class SingBoxVpnManager {
         } catch (error) {
             if (configPath) GLib.unlink(configPath);
             Main.notify(APP_NAME, format(_('Could not generate the configuration: %s'), error.message));
+            this._onChanged();
             return;
         }
 
@@ -71,6 +72,7 @@ class SingBoxVpnManager {
         } catch (error) {
             GLib.unlink(configPath);
             Main.notify(APP_NAME, format(_('Could not start the sing-box backend: %s'), error.message));
+            this._onChanged();
             return;
         }
 
@@ -123,6 +125,10 @@ class SingBoxVpnManager {
     stop() {
         if (!this._process) return;
 
+        // Deliberately does not cancel _refreshCancellable: the refresh is
+        // independent of the running process by design, and letting it finish
+        // caches a fresher configuration for next time. destroy() does cancel
+        // it, because that is the case where gnome-shell itself is going away.
         const stoppedLink = this.activeLink;
         try {
             this._process.send_signal(15);
@@ -160,7 +166,7 @@ class SingBoxVpnManager {
         // A profile carries a whole configuration from the provider; a share
         // link only describes one node, so we generate the rest ourselves.
         const config = link.kind === 'profile' ? link.config : buildSingBoxConfig(link.url);
-        if (!config) throw new Error('This subscription has no cached configuration yet');
+        if (!config) throw new Error(_('This subscription has no cached configuration yet'));
 
         GLib.file_set_contents(path, JSON.stringify(config, null, 2));
         GLib.chmod(path, 0o600);

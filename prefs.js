@@ -36,13 +36,15 @@ const LinkRow = GObject.registerClass(
 class LinkRow extends Adw.ActionRow {
     // A stored profile URL is expected to be well-formed (it was fetched
     // successfully before being saved), but GLib.Uri.parse can still throw on
-    // an edge case we did not anticipate; fall back to the raw URL rather
-    // than breaking the whole list over one bad subtitle.
+    // an edge case we did not anticipate; fall back to an empty subtitle
+    // rather than breaking the whole list over one bad row.
     static _hostOf(url) {
         try {
             return GLib.Uri.parse(url, GLib.UriFlags.NONE).get_host();
         } catch (_error) {
-            return url || '';
+            // A subscription URL carries a bearer token in its query string;
+            // falling back to the raw URL would put that token on screen.
+            return '';
         }
     }
 
@@ -138,6 +140,14 @@ export default class SingBoxPreferences extends ExtensionPreferences {
                 profile = parseRemoteProfileLink(value);
             } catch (error) {
                 toast(format(_('That subscription link is malformed: %s'), error.message));
+                return;
+            }
+
+            // A subscription URL carries a bearer token in its query string,
+            // and the shell process fetches it on every connect. Cleartext is
+            // not a tradeoff worth offering.
+            if (!profile.url.startsWith('https://')) {
+                toast(_('A subscription URL must use https'));
                 return;
             }
 

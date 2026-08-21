@@ -14,8 +14,6 @@ install_data('icons/singbox-symbolic.svg',
 install_data('schemas/org.gnome.shell.extensions.' + domain + '.gschema.xml',
   install_dir: join_paths(extensiondir, 'schemas'))
 install_data('README.md', install_dir: extensiondir)
-install_data('install.sh', install_dir: extensiondir)
-install_data('scripts/privileged-setup.sh', install_dir: join_paths(extensiondir, 'scripts'))
 
 msgfmt = find_program('msgfmt', required: false)
 if msgfmt.found()
