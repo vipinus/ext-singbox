@@ -6,6 +6,8 @@ GNOME Shell extension for importing and managing sing-box VPN links.
 
 - Import `vless://`, `vmess://`, `trojan://`, `ss://`, `hysteria2://` (or `hy2://`) links.
 - Import a QR-code image through `zbarimg` when it is installed.
+- Import a `sing-box://import-remote-profile` subscription link, storing the
+  configuration the provider returns and refreshing it in the background.
 - Keep links in GSettings and sort them by country flag.
 - Open a saved connection directly from the GNOME Quick Settings menu.
 - Delete links from the preferences window.
@@ -54,6 +56,23 @@ sing-box executable uses a different CLI; the command is saved when you press En
 the apply button, not while you type. The executable must be installed and have
 permission to create a TUN interface and configure routes (for example through
 `CAP_NET_ADMIN` or a suitable polkit/service setup).
+
+## Subscriptions
+
+A `sing-box://import-remote-profile` link points at a URL that returns a whole
+sing-box configuration rather than describing a single node. Importing one fetches
+that configuration immediately and stores it; the import fails rather than keeping
+an entry that has never been proven to work.
+
+Connecting uses the stored copy, so it never waits on the network. Once connected,
+the extension quietly refreshes the stored copy for next time. That refresh is
+silent on purpose: the token inside a subscription URL is typically short-lived, so
+a failed refresh is the normal steady state, and the credentials already stored keep
+working. A refresh never restarts a running connection.
+
+Subscriptions are stored in GSettings alongside share links, in plain text. This is
+the same exposure share links already have — their passwords are stored the same
+way — but a subscription holds a whole provider configuration, so there is more of it.
 
 ## Development
 
