@@ -103,6 +103,11 @@ class SingBoxVpnManager {
         this._refreshCancellable = new Gio.Cancellable();
 
         fetchText(link.url, this._refreshCancellable, (text, error) => {
+            // cancel() cannot stop a request that already finished and whose
+            // callback is sitting in the main loop. Without this guard that
+            // callback can still write dconf after destroy(), i.e. after
+            // gnome-shell has disabled the extension.
+            if (!this._settings) return;
             if (error !== null) return;
 
             const result = isValidRemoteConfig(text);
@@ -145,6 +150,8 @@ class SingBoxVpnManager {
         this._refreshCancellable?.cancel();
         this._refreshCancellable = null;
         shutdownFetch();
+        // Marks the manager dead for the in-flight refresh callback above.
+        this._settings = null;
 
         if (this._process) {
             try {

@@ -76,6 +76,17 @@ export default class SingBoxPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         window.set_default_size(720, 640);
 
+        // A subscription fetch can take up to 20 seconds. Without this the
+        // callback still runs after the window is gone, touching widgets that
+        // no longer exist. fetchText() drops the callback entirely on
+        // cancellation, so cancelling here is enough.
+        const importCancellable = new Gio.Cancellable();
+        // Returning false lets the close proceed; true would block it.
+        window.connect('close-request', () => {
+            importCancellable.cancel();
+            return false;
+        });
+
         const settings = this.getSettings(SCHEMA);
         const toast = message => window.add_toast(new Adw.Toast({title: message, timeout: 3}));
 
@@ -152,7 +163,7 @@ export default class SingBoxPreferences extends ExtensionPreferences {
             }
 
             toast(_('Fetching the subscription…'));
-            fetchText(profile.url, null, (text, error) => {
+            fetchText(profile.url, importCancellable, (text, error) => {
                 if (error !== null) {
                     toast(format(_('Could not fetch the subscription: %s'), error));
                     return;
