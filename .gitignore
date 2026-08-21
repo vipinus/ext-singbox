@@ -6,3 +6,6 @@ schemas/gschemas.compiled
 
 # Compiled translations are generated from po/
 /locale/
+
+# gnome-extensions pack 的产物，发布时现打即可
+*.shell-extension.zip

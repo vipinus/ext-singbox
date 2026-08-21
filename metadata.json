@@ -1,7 +1,7 @@
 {
-  "uuid": "gname-shell-extension-singbox@gnome-shell-extension",
+  "uuid": "support@anyfq.com",
   "name": "sing-box Link Manager",
-  "description": "Import and manage sing-box VPN links from URLs or QR images.",
+  "description": "Connect to a sing-box server straight from Quick Settings: import connections from a share link, a subscription URL, or a QR code image, then pick a server from the menu. Subscriptions are cached, so connecting never waits on the network.\n\nRequires sing-box to be installed and allowed to create a TUN device, for example with: sudo setcap cap_net_admin,cap_net_raw+ep \"$(command -v sing-box)\". Without that one-time step the backend cannot start. See the project page for the optional polkit rule that also removes the password prompts systemd-resolved would otherwise raise on every connect.",
   "version": 1,
   "shell-version": [
     "45",
@@ -12,6 +12,7 @@
     "50"
   ],
   "settings-schema": "org.gnome.shell.extensions.gname-shell-extension-singbox",
-  "url": "https://github.com/gname/gname-shell-extension-singbox",
-  "gettext-domain": "gname-shell-extension-singbox"
+  "url": "https://github.com/vipinus/ext-singbox",
+  "gettext-domain": "gname-shell-extension-singbox",
+  "version-name": "1.0.0"
 }

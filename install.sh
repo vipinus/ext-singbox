@@ -2,7 +2,7 @@
 set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-UUID='gname-shell-extension-singbox@gnome-shell-extension'
+UUID='support@anyfq.com'
 DOMAIN='gname-shell-extension-singbox'
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/$UUID"
 SING_BOX=${SING_BOX_BIN:-$(command -v sing-box || true)}
