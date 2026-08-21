@@ -5,9 +5,11 @@ import {
     describeProcessFailure,
     format,
     flagRank,
+    isRemoteProfileUrl,
     isSupportedUrl,
     parseLinks,
     parseProxyUrl,
+    parseRemoteProfileLink,
     sortLinks,
 } from '../lib/config.js';
 
@@ -210,6 +212,54 @@ test('a missing value leaves an empty placeholder rather than "undefined"', () =
 
 test('a value containing a placeholder is not expanded again', () => {
     assertEqual(format('%s and %s', '%s', 'tail'), '%s and tail');
+});
+
+suite('remote profile links');
+
+const PROFILE_LINK =
+    'sing-box://import-remote-profile?url=' +
+    encodeURIComponent('https://www.anyfq.com/api/v1/singbox/config?token=abc&region=uk') +
+    '#' + encodeURIComponent('🇬🇧 英国');
+
+test('the deep link scheme is recognised', () => {
+    assert(isRemoteProfileUrl(PROFILE_LINK), 'anyfq deep links must be recognised');
+    assert(!isRemoteProfileUrl('hysteria2://a@b:443'), 'share links are not profiles');
+    assert(!isRemoteProfileUrl('https://example.com/config'), 'a bare url is not a deep link');
+});
+
+test('the inner url survives its own query string intact', () => {
+    const parsed = parseRemoteProfileLink(PROFILE_LINK);
+    assertEqual(parsed.url,
+        'https://www.anyfq.com/api/v1/singbox/config?token=abc&region=uk');
+});
+
+test('the fragment splits into a flag and a name', () => {
+    const parsed = parseRemoteProfileLink(PROFILE_LINK);
+    assertEqual(parsed.flag, '🇬🇧');
+    assertEqual(parsed.name, '英国');
+});
+
+test('a fragment without a flag becomes the name alone', () => {
+    const link = 'sing-box://import-remote-profile?url=' +
+        encodeURIComponent('https://example.com/c') + '#' + encodeURIComponent('London');
+    const parsed = parseRemoteProfileLink(link);
+    assertEqual(parsed.flag, '');
+    assertEqual(parsed.name, 'London');
+});
+
+test('a missing fragment yields empty name and flag rather than throwing', () => {
+    const parsed = parseRemoteProfileLink(
+        'sing-box://import-remote-profile?url=' + encodeURIComponent('https://example.com/c'));
+    assertEqual(parsed.flag, '');
+    assertEqual(parsed.name, '');
+});
+
+test('a deep link with no url parameter is rejected', () => {
+    assertThrows(() => parseRemoteProfileLink('sing-box://import-remote-profile#x'));
+});
+
+test('remote profile links are importable', () => {
+    assert(isSupportedUrl(PROFILE_LINK), 'the import field must accept deep links');
 });
 
 suite('link list handling');
