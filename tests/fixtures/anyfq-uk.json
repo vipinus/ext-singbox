@@ -1,9 +1,21 @@
 {
-  "log": { "level": "warn", "timestamp": true },
+  "log": {
+    "level": "warn",
+    "timestamp": true
+  },
   "dns": {
     "servers": [
-      { "tag": "remote", "type": "udp", "server": "1.1.1.1", "detour": "proxy" },
-      { "tag": "local", "type": "udp", "server": "223.5.5.5", "detour": "direct" }
+      {
+        "tag": "remote",
+        "type": "udp",
+        "server": "1.1.1.1",
+        "detour": "proxy"
+      },
+      {
+        "tag": "local",
+        "type": "udp",
+        "server": "223.5.5.5"
+      }
     ],
     "final": "remote",
     "strategy": "ipv4_only"
@@ -12,7 +24,9 @@
     {
       "type": "tun",
       "tag": "tun-in",
-      "address": ["172.19.0.1/30"],
+      "address": [
+        "172.19.0.1/30"
+      ],
       "auto_route": true,
       "strict_route": true,
       "stack": "mixed"
@@ -24,24 +38,46 @@
       "tag": "proxy",
       "server": "uk.example-vpn.net",
       "server_port": 8443,
-      "server_ports": ["45000:49999"],
+      "server_ports": [
+        "45000:49999"
+      ],
       "hop_interval": "30s",
       "password": "fake@user.example:fakepassword",
-      "obfs": { "type": "salamander", "password": "fake-obfs-password" },
+      "obfs": {
+        "type": "salamander",
+        "password": "fake-obfs-password"
+      },
       "up_mbps": 100,
       "down_mbps": 500,
-      "tls": { "enabled": true, "server_name": "uk.example-vpn.net", "insecure": true }
+      "tls": {
+        "enabled": true,
+        "server_name": "uk.example-vpn.net",
+        "insecure": true
+      }
     },
-    { "type": "direct", "tag": "direct" }
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
   ],
   "route": {
     "rules": [
-      { "action": "sniff" },
-      { "protocol": "dns", "action": "hijack-dns" },
-      { "ip_is_private": true, "outbound": "direct" }
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      }
     ],
     "final": "proxy",
     "auto_detect_interface": true,
-    "default_domain_resolver": { "server": "local" }
+    "default_domain_resolver": {
+      "server": "local"
+    }
   }
 }
