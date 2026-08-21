@@ -1,12 +1,16 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import St from 'gi://St';
+import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {
+    accountOf,
+    maskAccount,
     buildSingBoxConfig,
     describeProcessFailure,
     format,
@@ -280,12 +284,50 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
             return;
         }
 
+        // 服务器收进子菜单，而不是平铺。
+        //
+        // 最初是平铺的——当时列表里只有两三条，子菜单等于给最常用的操作多加一次
+        // 点击。批量导入上线后一次就是 24 条，平铺直接撑出屏幕，看不到底下的
+        // 状态行和首选项。这是 tor-ext 用子菜单装 50 个国家的同一个理由。
+        const submenu = new PopupMenu.PopupSubMenuMenuItem(
+            format(_('Server: %s'), active ? active.name : _('None')));
+
+        // ⚠️ 高度封顶必须连同 _needsScrollbar 一起覆盖。
+        // gnome-shell 的 PopupSubMenu._needsScrollbar() 读的是**顶层菜单**的
+        // theme node 的 max-height，所以只给子菜单 actor 设 max-height 会被无视，
+        // vscrollbar_policy 停在 NEVER，内容照样溢出。改成读子菜单自己的
+        // max-height 与内部 box 的自然高度，open() 才会把 ScrollView 切到
+        // AUTOMATIC。这段照搬自 tor-ext 的 ui/quickToggle.js，它踩过同一个坑。
+        submenu.menu.actor.set_style('max-height: 20em;');
+        submenu.menu._needsScrollbar = function () {
+            const [, natural] = this.box.get_preferred_height(-1);
+            const maxHeight = this.actor.get_theme_node().get_max_height();
+            return maxHeight >= 0 && natural >= maxHeight;
+        };
+
         links.forEach(link => {
             const item = new PopupMenu.PopupMenuItem(`${link.flag || '🔗'}  ${link.name}`);
             if (active?.id === link.id) item.setOrnament(PopupMenu.Ornament.CHECK);
+
+            // 每条显示它属于哪个订阅账号。同时用两个账号时，光看地区名分不清
+            // 自己连的是谁的额度；打码是因为完整邮箱没必要长期挂在屏幕上。
+            // 手工加的分享链接没有缓存配置，取不到账号，就不显示。
+            const account = accountOf(link);
+            if (account) {
+                item.add_child(new St.Label({
+                    text: maskAccount(account),
+                    style: 'font-size: 0.8em; opacity: 0.55; margin-left: 12px;',
+                    x_align: Clutter.ActorAlign.END,
+                    x_expand: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                }));
+            }
+
             item.connect('activate', () => this._vpn.toggle(link));
-            this._linksSection.addMenuItem(item);
+            submenu.menu.addMenuItem(item);
         });
+
+        this._linksSection.addMenuItem(submenu);
     }
 
     _onClicked() {

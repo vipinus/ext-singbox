@@ -6,7 +6,7 @@ msgstr ""
 "Project-Id-Version: sing-box Link Manager 1\n"
 "Report-Msgid-Bugs-To: https://github.com/gname/gname-shell-extension-singbox/"
 "issues\n"
-"POT-Creation-Date: 2026-08-21 13:03-0400\n"
+"POT-Creation-Date: 2026-08-21 13:10-0400\n"
 "PO-Revision-Date: 2026-08-21 00:00+0800\n"
 "Last-Translator: ddxs <fabric.soul7@gmail.com>\n"
 "Language-Team: Chinese (Simplified)\n"
@@ -16,62 +16,71 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: extension.js:64
+#: extension.js:68
 #, javascript-format
 msgid "Could not generate the configuration: %s"
 msgstr "配置生成错误：%s"
 
-#: extension.js:74
+#: extension.js:78
 #, javascript-format
 msgid "Could not start the sing-box backend: %s"
 msgstr "无法启动 TUN 后端：%s"
 
-#: extension.js:82
+#: extension.js:86
 #, javascript-format
 msgid "Connecting to %s"
 msgstr "正在连接 %s"
 
-#: extension.js:176
+#: extension.js:180
 msgid "This subscription has no cached configuration yet"
 msgstr "此订阅还没有缓存的配置"
 
-#: extension.js:210
+#: extension.js:214
 #, javascript-format
 msgid "%s disconnected"
 msgstr "%s 已断开"
 
-#: extension.js:216
+#: extension.js:220
 #, javascript-format
 msgid "%s stopped: %s"
 msgstr "%s 已停止：%s"
 
-#: extension.js:218
+#: extension.js:222
 msgid "sing-box exited unexpectedly"
 msgstr "sing-box 意外退出"
 
-#: extension.js:228 extension.js:238 extension.js:270
+#: extension.js:232 extension.js:242 extension.js:274
 msgid "Off"
 msgstr "已关闭"
 
-#: extension.js:253
+#: extension.js:257
 msgid "Preferences…"
 msgstr "首选项…"
 
-#: extension.js:270
+#: extension.js:274
 #, javascript-format
 msgid "On · %s"
 msgstr "已开启 · %s"
 
-#: extension.js:274
+#: extension.js:278
 #, javascript-format
 msgid "Status: %s"
 msgstr "状态：%s"
 
-#: extension.js:277
+#: extension.js:281
 msgid "No connections yet, click to import"
 msgstr "暂无连接，点击导入"
 
-#: extension.js:303
+#: extension.js:293
+#, javascript-format
+msgid "Server: %s"
+msgstr "服务器：%s"
+
+#: extension.js:293
+msgid "None"
+msgstr "未选择"
+
+#: extension.js:345
 msgid "No connections available, import one first"
 msgstr "暂无可用连接，请先导入"
 

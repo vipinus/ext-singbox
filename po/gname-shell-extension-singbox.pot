@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: sing-box Link Manager 1\n"
 "Report-Msgid-Bugs-To: https://github.com/gname/gname-shell-extension-singbox/"
 "issues\n"
-"POT-Creation-Date: 2026-08-21 13:03-0400\n"
+"POT-Creation-Date: 2026-08-21 13:10-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,62 +18,71 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: extension.js:64
+#: extension.js:68
 #, javascript-format
 msgid "Could not generate the configuration: %s"
 msgstr ""
 
-#: extension.js:74
+#: extension.js:78
 #, javascript-format
 msgid "Could not start the sing-box backend: %s"
 msgstr ""
 
-#: extension.js:82
+#: extension.js:86
 #, javascript-format
 msgid "Connecting to %s"
 msgstr ""
 
-#: extension.js:176
+#: extension.js:180
 msgid "This subscription has no cached configuration yet"
 msgstr ""
 
-#: extension.js:210
+#: extension.js:214
 #, javascript-format
 msgid "%s disconnected"
 msgstr ""
 
-#: extension.js:216
+#: extension.js:220
 #, javascript-format
 msgid "%s stopped: %s"
 msgstr ""
 
-#: extension.js:218
+#: extension.js:222
 msgid "sing-box exited unexpectedly"
 msgstr ""
 
-#: extension.js:228 extension.js:238 extension.js:270
+#: extension.js:232 extension.js:242 extension.js:274
 msgid "Off"
 msgstr ""
 
-#: extension.js:253
+#: extension.js:257
 msgid "Preferences…"
-msgstr ""
-
-#: extension.js:270
-#, javascript-format
-msgid "On · %s"
 msgstr ""
 
 #: extension.js:274
 #, javascript-format
+msgid "On · %s"
+msgstr ""
+
+#: extension.js:278
+#, javascript-format
 msgid "Status: %s"
 msgstr ""
 
-#: extension.js:277
+#: extension.js:281
 msgid "No connections yet, click to import"
 msgstr ""
 
-#: extension.js:303
+#: extension.js:293
+#, javascript-format
+msgid "Server: %s"
+msgstr ""
+
+#: extension.js:293
+msgid "None"
+msgstr ""
+
+#: extension.js:345
 msgid "No connections available, import one first"
 msgstr ""
 
