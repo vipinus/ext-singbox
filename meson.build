@@ -1,6 +1,6 @@
 project('sing-box-gnome-shell-extension', version: '1.0.0')
 
-uuid = 'support@anyfq.com'
+uuid = 'singbox@anyfq.com'
 domain = 'gname-shell-extension-singbox'
 datadir = get_option('datadir')
 extensiondir = join_paths(datadir, 'gnome-shell', 'extensions', uuid)
