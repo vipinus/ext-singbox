@@ -225,7 +225,7 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         const icon = loadSingBoxIcon(extension.path);
         super._init({
             title: APP_NAME,
-            subtitle: _('Not connected'),
+            subtitle: _('Off'),
             gicon: icon,
             toggleMode: true,
         });
@@ -235,13 +235,22 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         this._settings = settings;
         this._vpn = vpn;
 
-        this.menu.setHeader(this._icon, APP_NAME, _('Not connected'));
+        this.menu.setHeader(this._icon, APP_NAME, _('Off'));
 
         this._linksSection = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._linksSection);
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        const preferences = new PopupMenu.PopupMenuItem(_('Open control panel'));
+        // 只读状态行，对应 tor-ext 菜单里的 Circuit 行。
+        // reactive:false 之外还要 can_focus=false：只关掉 reactive 的话它仍会
+        // 接收键盘焦点，看上去像个能点却点不动的条目。
+        this._statusItem = new PopupMenu.PopupMenuItem('', {reactive: false});
+        this._statusItem.can_focus = false;
+        this.menu.addMenuItem(this._statusItem);
+
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        const preferences = new PopupMenu.PopupMenuItem(_('Preferences…'));
         preferences.connect('activate', () => this._openPreferences());
         this.menu.addMenuItem(preferences);
 
@@ -256,9 +265,13 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         const links = sortLinks(parseLinks(this._settings.get_string('links')));
         const active = this._vpn.activeLink;
 
-        this.subtitle = active ? active.name : _('Not connected');
+        // On/Off 是 GNOME 快捷设置磁贴的通用说法（蓝牙、Wi-Fi、tor-ext 都用它），
+        // 比原来的 Not connected 更贴合这个控件的语境。
+        const status = active ? format(_('On · %s'), active.name) : _('Off');
+        this.subtitle = status;
         this.checked = Boolean(active);
-        this.menu.setHeader(this._icon, APP_NAME, this.subtitle);
+        this.menu.setHeader(this._icon, APP_NAME, status);
+        this._statusItem.label.text = format(_('Status: %s'), status);
 
         if (links.length === 0) {
             const empty = new PopupMenu.PopupMenuItem(_('No connections yet, click to import'));
