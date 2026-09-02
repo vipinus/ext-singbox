@@ -1,9 +1,60 @@
 # 状态与待办
 
-最后更新：2026-08-21（meson 路径已实测，两处已知问题已修）
+最后更新：2026-09-02（EGO 自动拒绝后的改造：后端搬到 systemd 用户单元）
 
 这个仓库是 [anyfq.com / vpn-next](https://github.com/) 的**子项目**。主干工作在 vpn-next，
 这里跟随。两边的契约写在 vpn-next 的 `CLAUDE.md`「与 Ext-SingBox 的交互」一节。
+
+## EGO 拒绝原因与本次改法（2026-09-02）
+
+上传 extensions.gnome.org 被**自动拒**。四条原因和对应的改法：
+
+| # | 拒绝原因 | 改法 |
+|---|---|---|
+| 1 | `extension.js` 把 GSettings 里的 `backend-command` 用 `GLib.shell_parse_argv` 解析后 `Gio.Subprocess.new` 执行，还在 gnome-shell 进程里管着一个长期运行的 VPN 守护进程 | 后端改成 systemd **用户单元** `singbox-ext.service`，扩展只通过**会话总线**发 `StartUnit`/`StopUnit`，订阅 `ActiveState`。新增 `lib/singboxService.js`，仿 tor-ext 的 `lib/torService.js` |
+| 2 | `metadata.json` 里有 `"version": 1` | 删掉。这个值由 EGO 分配；`tests/run.sh` 现在检查它**不存在**（原来的检查恰好要求它存在，把错误锁死了） |
+| 3 | zip 里带着 `README.md` | 新增 `scripts/pack.sh`，用 `gnome-extensions pack` 只收运行时文件，再用**白名单**验收包内容 |
+| 4 | `extension.js` 的 `GLib.chmod`，以及描述里教用户跑 `sudo setcap` | 配置改成「创建时就带对权限」：目录走 `mkdir(0700)`，文件走 `Gio.FileCreateFlags.PRIVATE` + `REPLACE_DESTINATION`。描述改成「后端是项目安装脚本装好的 systemd 用户服务」，不再出现 `sudo …` |
+
+### 新的运行方式
+
+```
+点磁贴 → writeConfig() 写 ~/.config/sing-box/ext/config.json（0600）
+       → 会话总线 org.freedesktop.systemd1 → StartUnit("singbox-ext.service")
+       → systemd 起 sing-box；PropertiesChanged 的 ActiveState 回来后刷磁贴
+```
+
+- 用户实例**不需要 polkit**：调用者就是单元的所有者。（tor-ext 那套 polkit 规则是给
+  跑在 root 下的系统单元用的，两码事。）DNS 免密那条 polkit 规则仍然要，原因没变。
+- 单元没有 `[Install] WantedBy=`，`Restart=no`，`KillSignal=SIGINT`。
+- **禁用扩展不再断开连接**——后端归 systemd 管。扩展加载时读一次单元状态，
+  用 `last-link-id` 还原是哪一条，把磁贴同步成实际情况。
+
+### 几个踩到的点
+
+- `Manager.Subscribe()` **不能省**：systemd 只向调用过它的客户端广播单元属性变化。
+  不调的话一条 `PropertiesChanged` 都收不到，症状是「连上了但磁贴不动」。
+  测试里专门有一条锁住它。
+- `GetUnit` 只认**已经加载进内存**的单元，第一次连接必然失败，要落到 `LoadUnit`；
+  而 `LoadUnit` 对根本不存在的单元也成功（`LoadState` 是 `not-found`），所以
+  「装没装」只能看 `LoadState`，不能看调用成不成功。
+- 换服务器要 `RestartUnit`，中间必然经过 `deactivating/inactive`。不挡的话会弹一条
+  假的「已断开」。用一个 `_starting` 闸门挡住，看到 `active`/`failed` 才落闸。
+- 文件权限：只写 `PRIVATE` 是**不够的**——替换已存在的文件时若不带
+  `REPLACE_DESTINATION`，Gio 走的是就地截断，沿用旧文件的权限位，PRIVATE 等于没写。
+  `tests/service-test.js` 里那条「重写一个 0644 的文件后仍是 0600」就是为它写的，
+  去掉任一标志都会红。
+- `tests/run.sh` 新加的「设置里不许有可执行字符串」这条检查，第一版被**自己的注释**
+  打红了——注释里写着 `shell_parse_argv` 这个词。数活跃项之前先剔注释，这个仓库
+  在别处栽过反过来的同一跤。
+
+### 还没验证的
+
+- **没有在真实 GNOME 会话里跑过**（本次改造）。已验证的是：14 条新单元测试（含对
+  D-Bus 调用形状的断言与三次变异检验）、`tests/run.sh` 全绿、`scripts/pack.sh` 产出的
+  包内容干净。真机验收要看的是：单元装上后点磁贴能连、切换服务器不弹假断开通知、
+  禁用扩展后连接仍在。
+- EGO 那边只有重新上传才知道结论。zip 已按新规则重打，文件名不变。
 
 ## 现在能做什么
 
@@ -16,7 +67,10 @@
 
 **已自动验证**（`./tests/run.sh`，CI 同样跑）
 
-- 51 个单元测试：链接解析、配置生成、订阅深链解析、响应校验、失败信息提取
+- 74 个单元测试：`tests/config-test.js` 60 条（链接解析、配置生成、订阅深链解析、
+  响应校验）+ `tests/service-test.js` 14 条（配置文件权限、systemd D-Bus 调用形状）。
+  ⚠️ 原来这里写「51 个」并含「失败信息提取」——那组测试随 `describeProcessFailure`
+  一起删了：stderr 现在归 journal，扩展读不到，留着就是无人调用的死代码
 - 每一份生成的配置都喂给**真实 `sing-box check`**——这是最重要的一层，它挡住的正是
   2026-08-21 那个把服务端配置写成 1.12 前 DNS 格式、导致启动即 FATAL 的问题
 - `tests/fixtures/anyfq-uk.json` 是**脱敏的 anyfq.com 真实响应**（真实结构、假凭据），
@@ -81,7 +135,9 @@
 
 首次真机试用时：**连接要输三次密码，断开再输一次**。
 
-根因不在扩展代码——`stop()` 就是个 `send_signal(15)`，全仓库没有一处 pkexec。
+根因不在扩展代码——当时的 `stop()` 就是个 `send_signal(15)`，全仓库没有一处 pkexec。
+（2026-09-02 起 `stop()` 改成对 systemd 用户单元发 `StopUnit`，这段结论不受影响：
+弹窗来自 sing-box 调 resolve1，跟谁来启停它无关。）
 弹窗来自 sing-box：它以普通用户身份运行（`setcap` 只给了两个网络 capability，
 没给 root），而要通过 DBus 让 systemd-resolved 把 DNS 指进隧道。journal 的时序
 把因果钉死了，每次弹窗后面紧跟着一条 resolved 的日志：

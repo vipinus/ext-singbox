@@ -12,7 +12,8 @@ GNOME Shell extension for importing and managing sing-box VPN links.
 - Open a saved connection directly from the GNOME Quick Settings menu.
 - Delete links from the preferences window.
 - Generate a full-tunnel sing-box configuration with automatic routes and DNS hijacking.
-- Report backend startup failures in a notification instead of only in the journal.
+- Start and stop the backend as a systemd user service; the extension itself never
+  spawns a process.
 
 Requires sing-box 1.12 or newer; the generated configuration uses the DNS server
 format introduced in that release.
@@ -23,11 +24,18 @@ format introduced in that release.
 ./install.sh
 ```
 
-安装脚本会通过 `pkexec` 请求一次系统授权，做三件事：`modprobe tun`、给 sing-box
-设置 `CAP_NET_ADMIN` 与 `CAP_NET_RAW`、安装一条 polkit 规则。扩展与 sing-box
-始终以当前用户运行，不会以 root 运行。脚本同时会编译 GSettings schema 并安装翻译。
+装一次就够，它做四件事：
 
-这三件都是幂等的，所以**第二次之后的安装不会再要密码**：脚本先自查一遍，都就位就
+1. **`pkexec` 一次系统授权**：`modprobe tun`、给 sing-box 设 `CAP_NET_ADMIN` 与
+   `CAP_NET_RAW`、装一条 polkit 规则（下面详述）。扩展与 sing-box 始终以当前用户
+   运行，不会以 root 运行。
+2. **装扩展本身**到 `~/.local/share/gnome-shell/extensions/`，并编译 GSettings
+   schema 与翻译。
+3. **装后端的 systemd 用户单元** `systemd/singbox-ext.service` 到
+   `~/.config/systemd/user/`，然后 `systemctl --user daemon-reload`。
+4. 检查可选的 `zbarimg`（二维码导入用）。
+
+前三件都是幂等的，所以**第二次之后的安装不会再要密码**：脚本先自查一遍，都就位就
 跳过 `pkexec`。要强制重做（例如手工删过 polkit 规则）：
 
 ```sh
@@ -38,6 +46,35 @@ FORCE_PRIVILEGED_SETUP=1 ./install.sh
 `root:polkitd 0750`，普通用户连 `stat` 都不行。改成用 `pkcheck` 直接问 polkitd
 「我现在有没有这个权限」，是功能验证而非代理指标：规则被删、被改窄、或写的是别的
 用户，它都会如实返回未授权，于是重新请求授权。
+
+## 后端是怎么跑起来的
+
+扩展**自己不起任何进程**。sing-box 由 systemd 的用户实例托管：
+
+```
+点磁贴 → 扩展写 ~/.config/sing-box/ext/config.json（0600）
+       → 会话总线 org.freedesktop.systemd1 → StartUnit("singbox-ext.service")
+       → systemd 起 sing-box，扩展订阅 ActiveState，把状态映射回磁贴
+```
+
+单元刻意**不** `enable`（没有 `[Install] WantedBy=`）：它是按需启动的，开机不自启。
+`Restart=no`：连接是用户按出来的，掉了就该在磁贴上显示成断开，而不是安静地重启循环。
+
+几条随之而来的行为：
+
+- **禁用扩展或重启 gnome-shell 不会断开连接**——后端归 systemd 管，活得比扩展久。
+  扩展重新加载时会读一次单元状态，把磁贴同步成实际情况。要断开就点磁贴，或者
+  `systemctl --user stop singbox-ext.service`。
+- **单元没装时**点连接会提示「先运行 install.sh」，而不是一个看不懂的 D-Bus 报错。
+- 后端起不来时通知里给的是 `journalctl --user -u singbox-ext.service`——日志现在在
+  journal 里，扩展不再截取 sing-box 的 stderr。
+
+常用命令：
+
+```sh
+systemctl --user status singbox-ext.service
+journalctl --user -u singbox-ext.service -n 50
+```
 
 ### 那条 polkit 规则是干什么的
 
@@ -74,28 +111,33 @@ meson setup build --wipe --prefix="$HOME/.local"
 meson install -C build
 ```
 
+⚠️ meson 只装扩展本身。走这条路的话，`install.sh` 的另外两件事要手工做：把
+`systemd/singbox-ext.service` 复制到 `~/.config/systemd/user/` 并
+`systemctl --user daemon-reload`，以及跑一遍 `scripts/privileged-setup.sh`。
+
 Install `zbarimg` from your distribution if QR image import is needed; the
 preferences window says so explicitly when it is missing.
 
 ## TUN permissions
 
-For Linux TUN mode, grant the installed sing-box binary the network administration
-capability instead of running the GNOME Shell extension as root:
+TUN 模式要能建网卡、改路由。这里给的是 sing-box 二进制的 capability，而不是
+把谁提成 root：
 
 ```sh
 sudo setcap cap_net_admin,cap_net_raw+ep "$(command -v sing-box)"
 getcap "$(command -v sing-box)"
 ```
 
-The generated configuration uses `auto_route`, `strict_route`, and DNS hijacking. On
-systems where capability-based TUN creation is restricted, run sing-box through a
-dedicated privileged system service and set the service command in the preferences.
+`install.sh` 的特权步骤已经做了这件事，上面那条只是手工核对/补做时用。生成的配置用
+`auto_route`、`strict_route` 和 DNS 劫持。
 
-The default backend command is `sing-box run -c`. Change it in the preferences if your
-sing-box executable uses a different CLI; the command is saved when you press Enter or
-the apply button, not while you type. The executable must be installed and have
-permission to create a TUN interface and configure routes (for example through
-`CAP_NET_ADMIN` or a suitable polkit/service setup).
+⚠️ 后端的启动命令**不再是一项设置**。它写死在 `systemd/singbox-ext.service` 的
+`ExecStart` 里，配置路径 `%h/.config/sing-box/ext/config.json` 与
+`lib/singboxService.js` 的 `configPath()` 一一对应（`tests/service-test.js` 会对拍这两处）。
+sing-box 装在非常规位置的话，改单元文件后 `systemctl --user daemon-reload`。
+
+原来那个可编辑的「启动命令」输入框已经删掉：扩展执行来自设置的命令字符串是
+extensions.gnome.org 明令禁止的，见下面的「上传到 extensions.gnome.org」。
 
 ## Subscriptions
 
@@ -114,28 +156,56 @@ Subscriptions are stored in GSettings alongside share links, in plain text. This
 the same exposure share links already have — their passwords are stored the same
 way — but a subscription holds a whole provider configuration, so there is more of it.
 
+## 上传到 extensions.gnome.org
+
+```sh
+./scripts/pack.sh      # 产出 singbox@anyfq.com.shell-extension.zip
+```
+
+**包里有的**（运行时全部家当）：
+
+```
+extension.js  prefs.js  metadata.json
+lib/{config,fetch,singboxService}.js
+icons/singbox-symbolic.svg
+schemas/org.gnome.shell.extensions.gname-shell-extension-singbox.gschema.xml
+locale/zh_CN/LC_MESSAGES/gname-shell-extension-singbox.mo
+```
+
+**包里没有的**（都是一次性的宿主机配置或开发资产，规则明确要求不要带）：
+
+```
+README.md  docs/  install.sh  scripts/  systemd/  tests/  po/  meson.build  .github/
+```
+
+`scripts/pack.sh` 用白名单验收包内容——黑名单会漏掉下次新加的目录。
+
+`metadata.json` 里**没有** `version` 键：那个值由 extensions.gnome.org 分配，自己写
+一个进去会被自动拒。`tests/run.sh` 现在会检查它不存在。
+
 ## Development
 
-Pure logic — link parsing, configuration generation, failure reporting — lives in
-`lib/config.js` so that it can be tested outside a GNOME Shell session.
+Pure logic — link parsing and configuration generation — lives in `lib/config.js`;
+everything about the backend (unit name, config path, D-Bus calls) lives in
+`lib/singboxService.js`. Neither imports `resource:///org/gnome/shell/*`, so both can
+be tested outside a GNOME Shell session — the D-Bus layer with a fake bus object.
 
 ```sh
 ./tests/run.sh
 ```
 
-The suite syntax-checks every source file, runs the unit tests under `gjs`, compiles
-the GSettings schema, validates the translations, and — when `sing-box` is on `PATH` —
-feeds every generated configuration to `sing-box check`. That last step is what keeps
-the generator honest against new sing-box releases.
+The suite syntax-checks every source file, runs both unit test files under `gjs`,
+compiles the GSettings schema, validates the translations, checks that no executable
+command string has crept back into the settings, checks the systemd unit, and — when
+`sing-box` is on `PATH` — feeds every generated configuration to `sing-box check`.
+That last step is what keeps the generator honest against new sing-box releases.
 
 ### Translations
 
 Source strings are English and live in `po/`. After changing any user-visible string:
 
 ```sh
-xgettext --from-code=UTF-8 --language=JavaScript --keyword=_ \
-  --package-name="sing-box Link Manager" --package-version=1 \
-  -f po/POTFILES.in -o po/gname-shell-extension-singbox.pot
+./scripts/update-pot.sh
 msgmerge --update po/zh_CN.po po/gname-shell-extension-singbox.pot
 ```
 
