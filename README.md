@@ -20,11 +20,29 @@ format introduced in that release.
 
 ## Install locally
 
+全新机器上从零到能用，四步：
+
 ```sh
+# 1. 先装 sing-box 本体（扩展不带二进制，也不会替你装）
+#    发行版仓库里通常没有；从 https://github.com/SagerNet/sing-box/releases
+#    取对应架构的包，或用发行版自己的源。要 1.12 或更新。
+sing-box version
+
+# 2. 装扩展 + 后端单元 + 一次性系统授权
 ./install.sh
+
+# 3. 启用扩展（只有第一次装需要）
+gnome-extensions enable singbox@anyfq.com
+
+# 4. 注销并重新登录
 ```
 
-装一次就够，它做四件事：
+⚠️ 第 4 步不能省，也不能用 `gnome-extensions disable/enable` 代替：GJS 缓存 ESM
+模块，禁用再启用**不会重新加载 `extension.js`**，Wayland 下也没有 Alt+F2 r 这条退路。
+症状是「改了没生效」，极容易误判成代码写错。（`prefs.js` 不受影响，每次开首选项
+窗口都是新进程。）
+
+`install.sh` 做四件事：
 
 1. **`pkexec` 一次系统授权**：`modprobe tun`、给 sing-box 设 `CAP_NET_ADMIN` 与
    `CAP_NET_RAW`、装一条 polkit 规则（下面详述）。扩展与 sing-box 始终以当前用户
@@ -32,7 +50,10 @@ format introduced in that release.
 2. **装扩展本身**到 `~/.local/share/gnome-shell/extensions/`，并编译 GSettings
    schema 与翻译。
 3. **装后端的 systemd 用户单元** `systemd/singbox-ext.service` 到
-   `~/.config/systemd/user/`，然后 `systemctl --user daemon-reload`。
+   `~/.config/systemd/user/`，然后 `systemctl --user daemon-reload`。安装时会把
+   `ExecStart` 里的 `/usr/bin/env sing-box` 换成本机 sing-box 的**绝对路径**——
+   装完还靠 PATH 找的话，跑起来的是哪一个取决于用户实例的环境，而 `setcap`
+   只给了那一个二进制。
 4. 检查可选的 `zbarimg`（二维码导入用）。
 
 前三件都是幂等的，所以**第二次之后的安装不会再要密码**：脚本先自查一遍，都就位就

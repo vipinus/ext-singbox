@@ -61,7 +61,10 @@
 - 导入 `vless://` / `vmess://` / `trojan://` / `ss://` / `hysteria2://`（含 `hy2://`）分享链接
 - 导入二维码图片（需要 `zbarimg`，Ubuntu 上是 `zbar-tools` 包）
 - 导入 `sing-box://import-remote-profile` 订阅深链，抓取并缓存整份配置
-- 从快捷设置面板一键连接；后端启动失败会把 sing-box 的 FATAL 行报进通知
+- 从快捷设置面板一键连接（启停的是 systemd 用户单元 `singbox-ext.service`）
+- 后端异常退出会发通知，内容是 `journalctl --user -u singbox-ext.service`
+  ——⚠️ 原来这里写「把 sing-box 的 FATAL 行报进通知」，那条路径 2026-09-02 起没有了：
+  stderr 归 journal，扩展读不到
 
 ## 已验证 / 未验证
 
@@ -83,6 +86,10 @@
   `icons/singbox-symbolic.svg` / schema 的 xml 与**编译出的 `gschemas.compiled`（407 字节）**/
   `locale/zh_CN/.../*.mo` / `README.md`。代码里 `from './...'` 引到的本地文件逐个核对都在。
 - 与 `install.sh` 机械对比：两条路径装的东西一致，meson 只多一个 README.md。
+
+⚠️ 上面两条是 **2026-08-21 的快照，已过时**：2026-09-02 起 meson **不再装 README.md**
+（扩展目录里只放运行时文件），并且多装一个 `lib/singboxService.js`。meson 也**不装**
+后端的 systemd 用户单元——走那条路要手工补 `install.sh` 的另外两件事。
 - ⚠️ 这只证明**装得对**，不证明装完能跑——「装完在真实会话里能不能连」仍属下面的未验证项。
 
 **已在真实 GNOME 会话里跑通**（2026-08-21）
@@ -183,15 +190,13 @@ resolve1 的每个方法都是独立 action，默认 `auth_admin_keep`，而「�
 ./install.sh      # 装到 ~/.local/share/gnome-shell/extensions/，会提示缺失的 zbarimg
 ```
 
-改了任何用户可见字符串之后，必须重新生成翻译模板，否则 **CI 会红**（`tests/run.sh`
-只跑 `msgfmt --check`，不校验 `.pot` 新鲜度，所以本地全绿也可能 CI 失败）：
+改了任何用户可见字符串之后，必须重新生成翻译模板。⚠️ 这里原来写着「`tests/run.sh`
+只跑 `msgfmt --check`，不校验 `.pot` 新鲜度，所以本地全绿也可能 CI 失败」——**已过时**：
+本地那步（`== Translation template`）和 CI 跑的是同一条 `scripts/update-pot.sh`，
+模板过期本地就会红，不会等到 CI。
 
 ```sh
-xgettext --from-code=UTF-8 --language=JavaScript --keyword=_ \
-  --package-name="sing-box Link Manager" --package-version=1 \
-  --copyright-holder="sing-box Link Manager contributors" \
-  --msgid-bugs-address="https://github.com/gname/gname-shell-extension-singbox/issues" \
-  -f po/POTFILES.in -o po/gname-shell-extension-singbox.pot
+./scripts/update-pot.sh
 msgmerge --quiet --update --backup=none po/zh_CN.po po/gname-shell-extension-singbox.pot
 ```
 
