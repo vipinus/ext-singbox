@@ -290,6 +290,29 @@ asyncTest('a bus that refuses everything reads as inactive, not as a crash', asy
     service.destroy();
 });
 
+asyncTest('a failed subscription is not cached forever either', async () => {
+    // 订阅挂了一次就永远不再重试的话，磁贴会一直收不到状态变化，而且看不出
+    // 哪里坏了——这条锁住 _subscribePromise 也走 _unitPathPromise 那套清缓存。
+    const bus = busWith();
+    const realSubscribe = bus.signal_subscribe.bind(bus);
+    let failOnce = true;
+    bus.signal_subscribe = (...args) => {
+        if (failOnce) {
+            failOnce = false;
+            throw new Error('signal_subscribe failed');
+        }
+        return realSubscribe(...args);
+    };
+
+    const service = new SingBoxService({bus});
+    assertEqual(await service.state(), 'inactive', 'the failure is swallowed');
+    assertEqual(bus.subscriptions.size, 0, 'nothing is subscribed yet');
+
+    assertEqual(await service.state(), 'inactive', 'the next call retries');
+    assertEqual(bus.subscriptions.size, 1, 'and the retry subscribes');
+    service.destroy();
+});
+
 asyncTest('a failed resolution is not cached forever', async () => {
     // 总线一时不可用不该把后面每次调用都钉死在同一个错误上。
     let broken = true;
