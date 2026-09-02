@@ -1,8 +1,7 @@
 {
   "uuid": "singbox@anyfq.com",
   "name": "sing-box Link Manager",
-  "description": "Connect to a sing-box server straight from Quick Settings: import connections from a share link, a subscription URL, or a QR code image, then pick a server from the menu. Subscriptions are cached, so connecting never waits on the network.\n\nRequires sing-box to be installed and allowed to create a TUN device, for example with: sudo setcap cap_net_admin,cap_net_raw+ep \"$(command -v sing-box)\". Without that one-time step the backend cannot start. See the project page for the optional polkit rule that also removes the password prompts systemd-resolved would otherwise raise on every connect.",
-  "version": 1,
+  "description": "Connect to a sing-box server straight from Quick Settings: import connections from a share link, a subscription URL, or a QR code image, then pick a server from the menu. Subscriptions are cached, so connecting never waits on the network.\n\nThe extension never spawns processes. The sing-box backend runs as a systemd user service (singbox-ext.service) that the install script in the project sets up together with the permissions sing-box needs to create a TUN device; the extension only starts and stops that service over D-Bus. Run that script once before connecting - see the project page.",
   "shell-version": [
     "45",
     "46",

@@ -480,22 +480,15 @@ export default class SingBoxPreferences extends ExtensionPreferences {
         buttonRow.add_suffix(importButton);
         importGroup.add(buttonRow);
 
+        // 后端一栏被整个删掉了：那里原来是一个可编辑的「启动命令」输入框，
+        // 扩展再把它 shell_parse_argv 出来执行。EGO 的审查规则不允许扩展执行
+        // 来自设置的命令——一个文本框就是一条任意命令执行的路径。现在后端固定
+        // 由 systemd 用户单元 singbox-ext.service 托管，装在哪、怎么起都由
+        // 项目的 install.sh 决定，设置里不再存任何可执行的东西。
         const backendGroup = new Adw.PreferencesGroup({
             title: _('TUN backend'),
-            description: _('The generated sing-box TUN configuration is passed to this command. sing-box needs permission to create a TUN device and change routes.'),
+            description: _('sing-box runs as the systemd user service singbox-ext.service, which the install.sh script in the project sets up. Run it once before connecting; the extension only starts and stops that service.'),
         });
-        const backendRow = new Adw.EntryRow({
-            title: _('Start command'),
-            text: settings.get_string('backend-command'),
-            show_apply_button: true,
-        });
-        // Applied on Enter or via the apply button, so a half-typed command is
-        // never written to GSettings.
-        backendRow.connect('apply', row => {
-            settings.set_string('backend-command', row.text.trim());
-            toast(_('Start command saved'));
-        });
-        backendGroup.add(backendRow);
 
         page.add(listGroup);
         page.add(importGroup);

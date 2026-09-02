@@ -1,0 +1,29 @@
+[Unit]
+Description=sing-box backend for the GNOME Shell extension
+Documentation=https://github.com/vipinus/ext-singbox
+After=network.target
+
+[Service]
+Type=simple
+# /usr/bin/env 是为了从 PATH 里找 sing-box：systemd 要求 ExecStart 的第一个词是
+# 绝对路径，而 sing-box 装在哪由发行版/用户决定（/usr/bin 与 /usr/local/bin 都常见）。
+#
+# ⚠️ 配置路径必须和 lib/singboxService.js 的 configPath() 逐字一致，
+# tests/service-test.js 会把这两处对拍。
+ExecStart=/usr/bin/env sing-box run -c %h/.config/sing-box/ext/config.json
+
+# 起 TUN 设备要的两个 capability 在 sing-box 二进制上（scripts/privileged-setup.sh
+# 用 setcap 一次性给好），所以这个单元跑在普通用户下，不需要 root、不需要 polkit。
+
+# Restart=no：连接是用户按出来的，不是后台服务。掉了就该在磁贴上显示成断开，
+# 让用户自己决定要不要重连；自动重启会把「服务端配置坏了」这类问题变成
+# 一个安静的重启循环。
+Restart=no
+
+# sing-box 认 SIGINT 才会走它自己的清理（撤销路由、还原 systemd-resolved 的 DNS）。
+# 默认的 SIGTERM 也能退，但清理没那么完整。
+KillSignal=SIGINT
+TimeoutStopSec=15s
+
+# 刻意不写 [Install] WantedBy=default.target：这个单元是按需启动的、
+# 由扩展在用户点连接时 StartUnit，不参与开机自启。

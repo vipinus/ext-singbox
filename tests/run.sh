@@ -28,7 +28,8 @@ step 'Syntax check'
 if command -v node >/dev/null 2>&1; then
     scratch=$(mktemp -d)
     trap 'rm -rf "$scratch"' EXIT
-    for file in extension.js prefs.js lib/config.js lib/fetch.js tests/harness.js tests/config-test.js; do
+    for file in extension.js prefs.js lib/config.js lib/fetch.js lib/singboxService.js \
+            tests/harness.js tests/config-test.js tests/service-test.js; do
         cp "$file" "$scratch/$(echo "$file" | tr '/' '_').mjs"
     done
     for file in "$scratch"/*.mjs; do
@@ -42,6 +43,7 @@ fi
 step 'Unit tests'
 if command -v gjs >/dev/null 2>&1; then
     gjs -m tests/config-test.js || fail 'unit tests'
+    gjs -m tests/service-test.js || fail 'service unit tests'
 else
     printf 'gjs not found, cannot run the unit tests\n' >&2
     fail 'gjs missing'
@@ -156,13 +158,56 @@ else
 fi
 
 step 'Extension metadata'
+# ⚠️ version 这个键必须**不在**：它归 extensions.gnome.org 分配，自己写一个进去
+# 是这次被自动拒的四条原因之一。这条检查原本要求它存在，正好把错误锁死了。
 if command -v gjs >/dev/null 2>&1; then
     gjs -c 'const m = JSON.parse(new TextDecoder().decode(
         imports.gi.GLib.file_get_contents("metadata.json")[1]));
-        for (const key of ["uuid", "name", "description", "version",
+        for (const key of ["uuid", "name", "description",
                            "shell-version", "settings-schema", "gettext-domain"])
             if (m[key] === undefined) throw new Error("metadata.json is missing " + key);
+        if (m["version"] !== undefined)
+            throw new Error("metadata.json must not carry a version key; EGO assigns it");
         print("metadata.json is complete");' || fail 'metadata'
+fi
+
+step 'No executable strings in settings'
+# 这个仓库栽过的原型错误：一个可编辑的「启动命令」设置，扩展再把它执行掉。
+# schema 里不允许再出现任何看起来像命令的键，代码里也不允许再有 shell 解析
+# 或者起子进程的调用（prefs 里读二维码的 zbarimg 除外，那是用户主动点的一次性
+# 调用，且命令写死在代码里）。
+#
+# 注释行要先剔掉，否则「解释为什么不能这么写」的那句注释自己就会把检查打红——
+# 第一版正是这么误报的。这个仓库在别处已经栽过反过来的那一跤（把注释当活配置），
+# 两边其实是同一条：数活跃项之前先把注释去掉。
+hits=$(grep -nE 'backend-command|shell_parse_argv' extension.js prefs.js \
+        "schemas/org.gnome.shell.extensions.$DOMAIN.gschema.xml" |
+    grep -vE '^[^:]*:[0-9]+: *(//|\*|#)' || true)
+if [ -n "$hits" ]; then
+    printf '%s\n' "$hits" >&2
+    fail 'a command string is back in the settings or is being parsed for execution'
+else
+    printf 'no command strings in the schema, no shell parsing in the code\n'
+fi
+
+hits=$(grep -n 'Gio.Subprocess' extension.js | grep -vE '^[0-9]+: *(//|\*)' || true)
+if [ -n "$hits" ]; then
+    printf '%s\n' "$hits" >&2
+    fail 'extension.js must not spawn processes; the backend is a systemd user unit'
+else
+    printf 'extension.js spawns no processes\n'
+fi
+
+step 'systemd user unit'
+if [ -f systemd/singbox-ext.service ]; then
+    grep -q '^ExecStart=' systemd/singbox-ext.service || fail 'the unit has no ExecStart'
+    grep -q '^WantedBy=' systemd/singbox-ext.service &&
+        fail 'the unit must not be enabled into a target; it starts on demand'
+    grep -q 'singbox-ext.service' install.sh ||
+        fail 'install.sh does not install the unit'
+    printf 'unit file present and installed by install.sh\n'
+else
+    fail 'systemd/singbox-ext.service is missing'
 fi
 
 printf '\n'

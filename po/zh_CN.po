@@ -6,7 +6,7 @@ msgstr ""
 "Project-Id-Version: sing-box Link Manager 1\n"
 "Report-Msgid-Bugs-To: https://github.com/gname/gname-shell-extension-singbox/"
 "issues\n"
-"POT-Creation-Date: 2026-08-21 13:20-0400\n"
+"POT-Creation-Date: 2026-09-02 16:20-0400\n"
 "PO-Revision-Date: 2026-08-21 00:00+0800\n"
 "Last-Translator: ddxs <fabric.soul7@gmail.com>\n"
 "Language-Team: Chinese (Simplified)\n"
@@ -15,6 +15,16 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+
+#: extension.js
+msgid ""
+"The sing-box backend service is not installed yet: run install.sh from the "
+"project once"
+msgstr "后端服务还没装：先在项目目录里运行一次 install.sh"
+
+#: extension.js
+msgid "This subscription has no cached configuration yet"
+msgstr "此订阅还没有缓存的配置"
 
 #: extension.js
 #, javascript-format
@@ -32,22 +42,19 @@ msgid "Connecting to %s"
 msgstr "正在连接 %s"
 
 #: extension.js
-msgid "This subscription has no cached configuration yet"
-msgstr "此订阅还没有缓存的配置"
-
-#: extension.js
 #, javascript-format
 msgid "%s disconnected"
 msgstr "%s 已断开"
 
 #: extension.js
 #, javascript-format
-msgid "%s stopped: %s"
-msgstr "%s 已停止：%s"
+msgid "Could not stop the sing-box backend: %s"
+msgstr "无法停止 TUN 后端：%s"
 
 #: extension.js
-msgid "sing-box exited unexpectedly"
-msgstr "sing-box 意外退出"
+#, javascript-format
+msgid "%s stopped unexpectedly. Run journalctl --user -u %s to see why"
+msgstr "%s 意外停止。原因看 journalctl --user -u %s"
 
 #: extension.js
 msgid "Off"
@@ -264,19 +271,12 @@ msgstr "TUN 后端"
 
 #: prefs.js
 msgid ""
-"The generated sing-box TUN configuration is passed to this command. sing-box "
-"needs permission to create a TUN device and change routes."
+"sing-box runs as the systemd user service singbox-ext.service, which the "
+"install.sh script in the project sets up. Run it once before connecting; the "
+"extension only starts and stops that service."
 msgstr ""
-"启动连接时，扩展会生成 sing-box TUN 配置并传给此命令。需要 sing-box 具备创建 "
-"TUN 和修改路由的权限。"
-
-#: prefs.js
-msgid "Start command"
-msgstr "启动命令"
-
-#: prefs.js
-msgid "Start command saved"
-msgstr "启动命令已保存"
+"sing-box 由 systemd 用户单元 singbox-ext.service 托管，项目里的 install.sh 会"
+"把它装好。连接前先跑一次那个脚本；扩展只负责启停这个单元。"
 
 #: prefs.js
 msgid "QR images need the zbarimg tool: install the zbar-tools package"
@@ -299,6 +299,26 @@ msgstr "无法读取二维码图片：%s"
 #: prefs.js
 msgid "No QR code was found in that image"
 msgstr "图片中未检测到二维码"
+
+#, javascript-format
+#~ msgid "%s stopped: %s"
+#~ msgstr "%s 已停止：%s"
+
+#~ msgid "sing-box exited unexpectedly"
+#~ msgstr "sing-box 意外退出"
+
+#~ msgid ""
+#~ "The generated sing-box TUN configuration is passed to this command. sing-"
+#~ "box needs permission to create a TUN device and change routes."
+#~ msgstr ""
+#~ "启动连接时，扩展会生成 sing-box TUN 配置并传给此命令。需要 sing-box 具备创"
+#~ "建 TUN 和修改路由的权限。"
+
+#~ msgid "Start command"
+#~ msgstr "启动命令"
+
+#~ msgid "Start command saved"
+#~ msgstr "启动命令已保存"
 
 #~ msgid "Not connected"
 #~ msgstr "未连接"

@@ -5,7 +5,6 @@ import {
     accountInConfig,
     accountOf,
     buildSingBoxConfig,
-    describeProcessFailure,
     format,
     isRemoteProfileUrl,
     isSupportedUrl,
@@ -174,36 +173,6 @@ const ACCEPTED = [
 
 ACCEPTED.forEach(([name, url]) => {
     test(name, () => assertValidSingBoxConfig(buildSingBoxConfig(url), name));
-});
-
-suite('backend failure reporting');
-
-test('the fatal line is lifted out of sing-box log output', () => {
-    const stderr = [
-        '\x1b[31mERROR\x1b[0m[0000] something deprecated',
-        '\x1b[31mFATAL\x1b[0m[0000] decode config at proxy.json: invalid uuid',
-    ].join('\n');
-    assertEqual(describeProcessFailure(stderr), 'decode config at proxy.json: invalid uuid');
-});
-
-test('an error line is used when there is no fatal line', () => {
-    assertEqual(describeProcessFailure('\x1b[31mERROR\x1b[0m[0000] permission denied'),
-        'permission denied');
-});
-
-test('unrecognised output falls back to its last non-empty line', () => {
-    assertEqual(describeProcessFailure('starting\nsomething went wrong\n\n'),
-        'something went wrong');
-});
-
-test('empty output still yields a usable message', () => {
-    assert(describeProcessFailure('').length > 0, 'a message is always needed for the notification');
-    assert(describeProcessFailure('   \n  ').length > 0, 'whitespace counts as empty');
-});
-
-test('a very long message is truncated for the notification', () => {
-    const message = describeProcessFailure(`FATAL[0000] ${'x'.repeat(500)}`);
-    assert(message.length <= 200, `expected a short message, got ${message.length} characters`);
 });
 
 suite('string interpolation');

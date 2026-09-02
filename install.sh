@@ -5,6 +5,7 @@ PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 UUID='singbox@anyfq.com'
 DOMAIN='gname-shell-extension-singbox'
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/$UUID"
+USER_UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 SING_BOX=${SING_BOX_BIN:-$(command -v sing-box || true)}
 
 if [ -z "$SING_BOX" ] || [ ! -x "$SING_BOX" ]; then
@@ -55,7 +56,8 @@ rm -rf "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/schemas" "$INSTALL_DIR/lib" "$INSTALL_DIR/icons"
 
 cp "$PROJECT_DIR/metadata.json" "$PROJECT_DIR/extension.js" "$PROJECT_DIR/prefs.js" "$INSTALL_DIR/"
-cp "$PROJECT_DIR/lib/config.js" "$PROJECT_DIR/lib/fetch.js" "$INSTALL_DIR/lib/"
+cp "$PROJECT_DIR/lib/config.js" "$PROJECT_DIR/lib/fetch.js" \
+    "$PROJECT_DIR/lib/singboxService.js" "$INSTALL_DIR/lib/"
 cp "$PROJECT_DIR/icons/singbox-symbolic.svg" "$INSTALL_DIR/icons/"
 cp "$PROJECT_DIR/schemas/org.gnome.shell.extensions.$DOMAIN.gschema.xml" "$INSTALL_DIR/schemas/"
 glib-compile-schemas "$INSTALL_DIR/schemas"
@@ -69,6 +71,23 @@ if command -v msgfmt >/dev/null 2>&1; then
 else
     printf '%s\n' '未找到 msgfmt，跳过翻译安装（界面将显示英文）。' >&2
 fi
+
+# 后端单元。扩展自己不起任何进程——它只通过会话总线对这个单元发 StartUnit/StopUnit，
+# 所以单元不装的话磁贴只会提示「先运行 install.sh」。它跑在当前用户下，不需要
+# root、不需要 polkit；起 TUN 要的 capability 在 sing-box 二进制上（上面那步 setcap）。
+#
+# 刻意不 enable：这是按需启动的单元，开机不该自己起来。
+mkdir -p "$USER_UNIT_DIR"
+cp "$PROJECT_DIR/systemd/singbox-ext.service" "$USER_UNIT_DIR/"
+if command -v systemctl >/dev/null 2>&1; then
+    # daemon-reload 不能省：单元文件是新的或改过的时候，systemd 不重读就还认旧的
+    # （症状是启动报 not-found，或者用的还是上一版的 ExecStart）。
+    systemctl --user daemon-reload ||
+        printf '%s\n' '⚠️ systemctl --user daemon-reload 失败，登录会话里再手工跑一次。' >&2
+else
+    printf '%s\n' '⚠️ 未找到 systemctl，单元已复制但没有重新加载。' >&2
+fi
+printf '已安装后端单元 %s/singbox-ext.service\n' "$USER_UNIT_DIR"
 
 # QR import is optional, so a missing zbarimg is a warning rather than an error.
 # The zbar library is often already present; the command line tool is not.

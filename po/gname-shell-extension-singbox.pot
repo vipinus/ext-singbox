@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: sing-box Link Manager 1\n"
 "Report-Msgid-Bugs-To: https://github.com/gname/gname-shell-extension-singbox/"
 "issues\n"
-"POT-Creation-Date: 2026-08-21 13:20-0400\n"
+"POT-Creation-Date: 2026-09-02 16:20-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,6 +17,16 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+
+#: extension.js
+msgid ""
+"The sing-box backend service is not installed yet: run install.sh from the "
+"project once"
+msgstr ""
+
+#: extension.js
+msgid "This subscription has no cached configuration yet"
+msgstr ""
 
 #: extension.js
 #, javascript-format
@@ -34,21 +44,18 @@ msgid "Connecting to %s"
 msgstr ""
 
 #: extension.js
-msgid "This subscription has no cached configuration yet"
-msgstr ""
-
-#: extension.js
 #, javascript-format
 msgid "%s disconnected"
 msgstr ""
 
 #: extension.js
 #, javascript-format
-msgid "%s stopped: %s"
+msgid "Could not stop the sing-box backend: %s"
 msgstr ""
 
 #: extension.js
-msgid "sing-box exited unexpectedly"
+#, javascript-format
+msgid "%s stopped unexpectedly. Run journalctl --user -u %s to see why"
 msgstr ""
 
 #: extension.js
@@ -266,16 +273,9 @@ msgstr ""
 
 #: prefs.js
 msgid ""
-"The generated sing-box TUN configuration is passed to this command. sing-box "
-"needs permission to create a TUN device and change routes."
-msgstr ""
-
-#: prefs.js
-msgid "Start command"
-msgstr ""
-
-#: prefs.js
-msgid "Start command saved"
+"sing-box runs as the systemd user service singbox-ext.service, which the "
+"install.sh script in the project sets up. Run it once before connecting; the "
+"extension only starts and stops that service."
 msgstr ""
 
 #: prefs.js

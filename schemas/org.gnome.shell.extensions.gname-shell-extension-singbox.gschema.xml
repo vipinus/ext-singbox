@@ -7,11 +7,6 @@
       <summary>Saved sing-box links</summary>
       <description>Connection links stored as JSON.</description>
     </key>
-    <key name="backend-command" type="s">
-      <default>'sing-box run -c'</default>
-      <summary>sing-box command</summary>
-      <description>Command and arguments used to start the generated TUN configuration. The config path is appended as the final argument.</description>
-    </key>
     <key name="last-link-id" type="s">
       <default>''</default>
       <summary>Most recently connected entry</summary>

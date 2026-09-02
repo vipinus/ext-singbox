@@ -12,18 +12,18 @@ import {
     accountOf,
     maskAccount,
     buildSingBoxConfig,
-    describeProcessFailure,
     format,
     isValidRemoteConfig,
     parseLinks,
     sortLinks,
 } from './lib/config.js';
 import {fetchText, shutdownFetch} from './lib/fetch.js';
+import {SingBoxService, UNIT, removeConfig, writeConfig} from './lib/singboxService.js';
 
 const SCHEMA = 'org.gnome.shell.extensions.gname-shell-extension-singbox';
 
-// Display name. The cache directory below deliberately keeps upstream's
-// lowercase spelling, because it is a path rather than a label.
+// 通知与磁贴上的显示名。生成的配置放在哪由 lib/singboxService.js 决定，
+// 那个路径是和 systemd 单元之间的契约，与这个标签无关。
 const APP_NAME = 'Sing-box';
 
 function loadSingBoxIcon(extensionPath) {
@@ -34,16 +34,51 @@ function loadSingBoxIcon(extensionPath) {
 }
 
 /**
- * Owns the sing-box child process and the generated configuration that
- * belongs to it. At most one connection is active at a time.
+ * 连接的状态机：写配置、启停 systemd 用户单元、把单元状态翻译回菜单。
+ *
+ * 扩展自己不起任何进程。sing-box 由 systemd 的用户实例托管
+ * （systemd/singbox-ext.service，install.sh 装到 ~/.config/systemd/user/），
+ * 这里只通过会话总线发 StartUnit/StopUnit，并订阅 ActiveState。
+ * 同一时刻只有一条连接，因为只有一个单元、一份配置文件。
  */
 class SingBoxVpnManager {
     constructor(settings, onChanged) {
         this._settings = settings;
         this._onChanged = onChanged;
-        this._process = null;
         this._refreshCancellable = null;
         this.activeLink = null;
+
+        // 切换服务器要重启单元，中间必然经过 deactivating/inactive。那不是
+        // 「断开了」，照着报会弹一条莫名其妙的断开通知、磁贴还闪一下。
+        // 这个闸门挡住启动期间的中间态，看到 active 或 failed 才落闸；
+        // 用户自己点停也会直接把它清掉。
+        this._starting = false;
+
+        this._service = new SingBoxService();
+        this._activeChangedId = this._service.connect(
+            'active-changed', (_service, state) => this._onUnitState(state));
+
+        this._syncFromUnit();
+    }
+
+    /**
+     * 扩展重新加载时，单元可能还在跑——后端归 systemd 管，活得比扩展久。
+     * 磁贴要如实显示这一点，否则用户看到「Off」而流量其实还在隧道里。
+     * 连的是哪一条只能从 last-link-id 还原，那正是它被记下来的原因之一。
+     */
+    _syncFromUnit() {
+        this._service.state().then(state => {
+            // destroy() 之后回调才回来：什么都别做。
+            if (!this._settings) return;
+            if (state !== 'active' && state !== 'activating') return;
+
+            const links = parseLinks(this._settings.get_string('links'));
+            const last = this._settings.get_string('last-link-id');
+            // 认不出是哪条（条目被删了）时保持 Off——宁可少说，也不要在菜单上
+            // 打一个对不上任何条目的勾。用户点一下开关就能收敛。
+            this.activeLink = links.find(link => link.id === last) ?? null;
+            this._onChanged();
+        }).catch(() => {});
     }
 
     toggle(link) {
@@ -55,41 +90,47 @@ class SingBoxVpnManager {
     }
 
     start(link) {
-        this.stop();
-
-        let argv;
-        let configPath;
-        try {
-            const [, command] = GLib.shell_parse_argv(this._settings.get_string('backend-command'));
-            configPath = this._writeConfig(link);
-            argv = [...command, configPath];
-        } catch (error) {
-            if (configPath) GLib.unlink(configPath);
-            Main.notify(APP_NAME, format(_('Could not generate the configuration: %s'), error.message));
+        this._start(link).catch(error => {
+            this._starting = false;
+            removeConfig();
+            Main.notify(APP_NAME, error.message);
             this._onChanged();
-            return;
+        });
+    }
+
+    async _start(link) {
+        // 单元没装的时候必须说人话：D-Bus 那边只会回一句
+        // 「Unit singbox-ext.service not found.」，用户看了不知道该干什么。
+        if (!await this._service.isInstalled())
+            throw new Error(_('The sing-box backend service is not installed yet: run install.sh from the project once'));
+
+        // A profile carries a whole configuration from the provider; a share
+        // link only describes one node, so we generate the rest ourselves.
+        const config = link.kind === 'profile' ? link.config : buildSingBoxConfig(link.url);
+        if (!config)
+            throw new Error(_('This subscription has no cached configuration yet'));
+
+        const running = await this._service.isActive();
+        try {
+            writeConfig(config);
+        } catch (error) {
+            throw new Error(format(_('Could not generate the configuration: %s'), error.message));
         }
 
-        let process;
+        this._starting = true;
         try {
-            process = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDERR_PIPE);
+            // 已经在跑就得重启：配置是同一个文件路径，sing-box 只在启动时读一次。
+            await (running ? this._service.restart() : this._service.start());
         } catch (error) {
-            GLib.unlink(configPath);
-            Main.notify(APP_NAME, format(_('Could not start the sing-box backend: %s'), error.message));
-            this._onChanged();
-            return;
+            throw new Error(format(_('Could not start the sing-box backend: %s'), error.message));
         }
 
-        this._process = process;
         this.activeLink = link;
-        // 记下这次连的是哪条：磁贴开关在未连接时要连回它。
-        // 写在这里而不是 toggle()：只有真正起了进程才算「连过」。
-        this._settings.set_string('last-link-id', link.id);
+        // 记下这次连的是哪条：磁贴开关在未连接时要连回它，扩展重新加载后也靠它
+        // 认出还在跑的是哪条。写在这里而不是 toggle()：只有真发出了启动请求才算。
+        this._settings?.set_string('last-link-id', link.id);
         this._onChanged();
         Main.notify(APP_NAME, format(_('Connecting to %s'), link.name));
-
-        process.communicate_utf8_async(null, null, (_source, result) =>
-            this._onProcessExited(process, link, result));
 
         if (link.kind === 'profile') this._refreshProfile(link);
     }
@@ -102,7 +143,7 @@ class SingBoxVpnManager {
      * lapses, while the credentials already cached keep working. Warning about
      * it every connect would be a permanent false alarm.
      *
-     * The result never touches the running process — a silent reconnect is
+     * The result never touches the running service — a silent reconnect is
      * behaviour no user could explain.
      */
     _refreshProfile(link) {
@@ -135,22 +176,65 @@ class SingBoxVpnManager {
     }
 
     stop() {
-        if (!this._process) return;
-
         // Deliberately does not cancel _refreshCancellable: the refresh is
-        // independent of the running process by design, and letting it finish
+        // independent of the running service by design, and letting it finish
         // caches a fresher configuration for next time. destroy() does cancel
         // it, because that is the case where gnome-shell itself is going away.
-        const stoppedLink = this.activeLink;
-        try {
-            this._process.send_signal(15);
-        } catch (_error) {
-            // The process is already gone.
-        }
-        this._process = null;
+        const stopped = this.activeLink;
+        if (!stopped) return;
+
+        this._starting = false;
         this.activeLink = null;
-        if (stoppedLink) this._removeConfig(stoppedLink);
         this._onChanged();
+
+        this._service.stop().then(() => {
+            removeConfig();
+            Main.notify(APP_NAME, format(_('%s disconnected'), stopped.name));
+        }).catch(error => {
+            Main.notify(APP_NAME,
+                format(_('Could not stop the sing-box backend: %s'), error.message));
+        });
+    }
+
+    /**
+     * 单元自己变了状态。
+     *
+     * A backend that dies on its own is either a clean shutdown or a startup
+     * failure; the latter has to reach the user, because the only other trace
+     * of it is the journal.
+     */
+    _onUnitState(state) {
+        if (this._starting) {
+            if (state === 'active') this._starting = false;
+            else if (state === 'failed') this._onStopped(true);
+            return;
+        }
+
+        if (state === 'failed') this._onStopped(true);
+        else if (state === 'inactive') this._onStopped(false);
+    }
+
+    _onStopped(failed) {
+        this._starting = false;
+
+        // stop() 已经清过场并会自己发通知，这里就没事可做了。
+        const link = this.activeLink;
+        if (!link) return;
+
+        this.activeLink = null;
+        removeConfig();
+        this._onChanged();
+
+        if (!failed) {
+            Main.notify(APP_NAME, format(_('%s disconnected'), link.name));
+            return;
+        }
+
+        // 拿不到 sing-box 的 stderr 了——它现在是 systemd 的子进程，日志进了
+        // journal。与其猜，不如把查日志的那条命令原样给出来。
+        Main.notify(APP_NAME, format(
+            _('%s stopped unexpectedly. Run journalctl --user -u %s to see why'),
+            link.name, UNIT));
     }
 
     destroy() {
@@ -160,69 +244,17 @@ class SingBoxVpnManager {
         // Marks the manager dead for the in-flight refresh callback above.
         this._settings = null;
 
-        if (this._process) {
-            try {
-                this._process.force_exit();
-            } catch (_error) {
-                // The process is already gone.
-            }
+        if (this._activeChangedId) {
+            this._service.disconnect(this._activeChangedId);
+            this._activeChangedId = 0;
         }
-        if (this.activeLink) this._removeConfig(this.activeLink);
-        this._process = null;
+        // 刻意不停单元、也不删配置：后端归 systemd 管，禁用扩展或重启
+        // gnome-shell 不该掐掉用户正在用的连接（还在跑的 sing-box 也不需要
+        // 配置文件被抽走）。要断开就点磁贴，或者
+        // systemctl --user stop singbox-ext.service。
+        this._service.destroy();
+        this._service = null;
         this.activeLink = null;
-    }
-
-    _writeConfig(link) {
-        const directory = GLib.build_filenamev([GLib.get_user_cache_dir(), 'sing-box']);
-        GLib.mkdir_with_parents(directory, 0o700);
-        const path = GLib.build_filenamev([directory, `${link.id}.json`]);
-
-        // A profile carries a whole configuration from the provider; a share
-        // link only describes one node, so we generate the rest ourselves.
-        const config = link.kind === 'profile' ? link.config : buildSingBoxConfig(link.url);
-        if (!config) throw new Error(_('This subscription has no cached configuration yet'));
-
-        GLib.file_set_contents(path, JSON.stringify(config, null, 2));
-        GLib.chmod(path, 0o600);
-        return path;
-    }
-
-    _removeConfig(link) {
-        GLib.unlink(GLib.build_filenamev([
-            GLib.get_user_cache_dir(), 'sing-box', `${link.id}.json`]));
-    }
-
-    /**
-     * A backend that dies on its own is either a clean shutdown or a startup
-     * failure; the latter has to reach the user, because the only other trace
-     * of it is the journal.
-     */
-    _onProcessExited(process, link, result) {
-        let stderr = '';
-        try {
-            [, , stderr] = process.communicate_utf8_finish(result);
-        } catch (_error) {
-            // Reading the output failed; the exit status still tells us enough.
-        }
-
-        // stop() already cleaned up and notified for a user-requested shutdown.
-        if (this._process !== process) return;
-
-        this._process = null;
-        this.activeLink = null;
-        this._removeConfig(link);
-        this._onChanged();
-
-        if (process.get_successful()) {
-            Main.notify(APP_NAME, format(_('%s disconnected'), link.name));
-            return;
-        }
-
-        Main.notify(
-            APP_NAME,
-            format(_('%s stopped: %s'),
-                link.name,
-                describeProcessFailure(stderr, _('sing-box exited unexpectedly'))));
     }
 }
 

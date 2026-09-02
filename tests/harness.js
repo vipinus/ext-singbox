@@ -29,6 +29,35 @@ export function test(name, fn) {
     }
 }
 
+/**
+ * 跑一个返回 Promise 的测试体。
+ *
+ * D-Bus 那层全是 async 的，而 GJS 只有在回到主循环时才会清微任务队列——
+ * 不起一个 MainLoop 的话，`await` 之后的代码在测试进程里根本不会执行，
+ * 测试会「通过」得莫名其妙（一句断言都没跑到）。
+ */
+export function asyncTest(name, fn) {
+    test(name, () => {
+        const loop = new GLib.MainLoop(null, false);
+        let error = null;
+        let done = false;
+
+        Promise.resolve()
+            .then(() => fn())
+            .catch(e => {
+                error = e;
+            })
+            .finally(() => {
+                done = true;
+                loop.quit();
+            });
+
+        // done 已经为真时不能再 run()：quit() 已经发生过，run() 会一直等下去。
+        if (!done) loop.run();
+        if (error) throw error;
+    });
+}
+
 export function assert(condition, message) {
     if (!condition) throw new Error(message || 'assertion failed');
 }
