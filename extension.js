@@ -53,6 +53,7 @@ class SingBoxVpnManager {
         // 这个闸门挡住启动期间的中间态，看到 active 或 failed 才落闸；
         // 用户自己点停也会直接把它清掉。
         this._starting = false;
+        this._restartInterlude = false;
 
         this._service = new SingBoxService();
         this._activeChangedId = this._service.connect(
@@ -92,6 +93,7 @@ class SingBoxVpnManager {
     start(link) {
         this._start(link).catch(error => {
             this._starting = false;
+            this._restartInterlude = false;
             removeConfig();
             Main.notify(APP_NAME, error.message);
             this._onChanged();
@@ -110,7 +112,10 @@ class SingBoxVpnManager {
         if (!config)
             throw new Error(_('This subscription has no cached configuration yet'));
 
-        const running = await this._service.isActive();
+        // isRunning() 而不是「state === active」：换服务器时单元可能正处在
+        // activating，那时发 StartUnit 会被并进正在进行的启动任务里，而配置
+        // 文件已经被覆盖成新的一条——跑着的是旧节点，界面显示的是新节点。
+        const running = await this._service.isRunning();
         try {
             writeConfig(config);
         } catch (error) {
@@ -118,6 +123,10 @@ class SingBoxVpnManager {
         }
 
         this._starting = true;
+        // RestartUnit 必然经过一次 inactive，那是中间态不是「断开了」。
+        // 只放过这一次：之后再看到 inactive 就是后端自己退了，得如实报出去，
+        // 否则磁贴会卡在 On 上。用「发的是哪个动词」来判定，比事后回查状态确定。
+        this._restartInterlude = running;
         try {
             // 已经在跑就得重启：配置是同一个文件路径，sing-box 只在启动时读一次。
             await (running ? this._service.restart() : this._service.start());
@@ -184,6 +193,7 @@ class SingBoxVpnManager {
         if (!stopped) return;
 
         this._starting = false;
+        this._restartInterlude = false;
         this.activeLink = null;
         this._onChanged();
 
@@ -205,8 +215,17 @@ class SingBoxVpnManager {
      */
     _onUnitState(state) {
         if (this._starting) {
-            if (state === 'active') this._starting = false;
-            else if (state === 'failed') this._onStopped(true);
+            if (state === 'active') {
+                this._starting = false;
+                this._restartInterlude = false;
+            } else if (state === 'failed') {
+                this._onStopped(true);
+            } else if (state === 'inactive') {
+                // 换服务器时 RestartUnit 的那一次中间态，放过；再有一次就是
+                // 后端自己退了。
+                if (this._restartInterlude) this._restartInterlude = false;
+                else this._onStopped(false);
+            }
             return;
         }
 
@@ -216,6 +235,7 @@ class SingBoxVpnManager {
 
     _onStopped(failed) {
         this._starting = false;
+        this._restartInterlude = false;
 
         // stop() 已经清过场并会自己发通知，这里就没事可做了。
         const link = this.activeLink;

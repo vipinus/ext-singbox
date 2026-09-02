@@ -42,17 +42,18 @@ class FakeBus {
         this._nextId = 1;
     }
 
-    async call(_name, path, iface, method, params, _replyType, _flags, _timeout, cancellable) {
-        this.calls.push({path, iface, method, cancellable,
-            args: params ? params.deep_unpack() : null});
+    async call(_name, path, iface, method, params, replyType, flags, _timeout, cancellable) {
+        this.calls.push({path, iface, method, cancellable, flags,
+            args: params ? params.deep_unpack() : null,
+            replyType: replyType ? replyType.dup_string() : null});
         const handler = this.handlers[method];
         if (!handler) throw new Error(`unexpected method ${method}`);
         return handler(params);
     }
 
-    signal_subscribe(_name, iface, signal, path, _arg0, _flags, callback) {
+    signal_subscribe(_name, iface, signal, path, arg0, _flags, callback) {
         const id = this._nextId++;
-        this.subscriptions.set(id, {iface, signal, path, callback});
+        this.subscriptions.set(id, {iface, signal, path, arg0, callback});
         return id;
     }
 
@@ -185,6 +186,11 @@ asyncTest('start, stop and restart address the right unit with the right job mod
         assert(sent, `${call}() sends ${method}`);
         assertEqual(sent.args, [UNIT, 'replace'], `${method} arguments`);
         assertEqual(sent.path, '/org/freedesktop/systemd1', `${method} object path`);
+        assertEqual(sent.iface, 'org.freedesktop.systemd1.Manager', `${method} interface`);
+        assertEqual(sent.replyType, '(o)', `${method} reply signature`);
+        // ⚠️ 不能带 ALLOW_INTERACTIVE_AUTHORIZATION：用户实例不走 polkit，
+        // 带上它等于给「这里可能弹窗」留了个口子。
+        assertEqual(sent.flags, Gio.DBusCallFlags.NONE, `${method} call flags`);
         service.destroy();
     }
 });
@@ -198,6 +204,23 @@ asyncTest('the unit name matches the file install.sh installs', async () => {
     const unit = new TextDecoder().decode(contents);
     assert(!/^WantedBy=/m.test(unit), 'the unit must not be wanted by any target');
     assert(/^Restart=no$/m.test(unit), 'the unit must not restart on its own');
+});
+
+asyncTest('install.sh rewrites ExecStart to an absolute path, same config file', async () => {
+    // 安装时把 /usr/bin/env sing-box 换成本机的绝对路径。这条检查盯的是替换后
+    // 配置文件路径没变——两边任何一处改了名字，磁贴会静默地读到另一个文件。
+    const [, contents] = GLib.file_get_contents('install.sh');
+    const install = new TextDecoder().decode(contents);
+    const rewrite = install.split('\n').find(line => line.includes('^ExecStart=.*'));
+    assert(rewrite, 'install.sh no longer rewrites ExecStart');
+
+    // sed "s|^ExecStart=.*|<替换成这句>|" —— 用 | 切开取第三段
+    const replacement = rewrite.split('|')[2];
+    assert(replacement?.startsWith('ExecStart=$SING_BOX '),
+        `install.sh must use the absolute binary, got: ${replacement}`);
+
+    const configArgument = replacement.trim().split(/\s+/).pop();
+    assertEqual(configArgument.replace('%h', GLib.get_home_dir()), configPath());
 });
 
 asyncTest('a missing unit reads as not installed instead of throwing', async () => {
@@ -215,19 +238,78 @@ asyncTest('the active state is read from the Unit interface', async () => {
     const service = new SingBoxService({bus});
 
     assertEqual(await service.state(), 'active');
-    assertEqual(await service.isActive(), true);
+    assertEqual(await service.isRunning(), true);
 
     const get = bus.calls.find(entry => entry.method === 'Get');
     assertEqual(get.args, ['org.freedesktop.systemd1.Unit', 'ActiveState']);
     assertEqual(get.path, UNIT_OBJECT_PATH);
+    assertEqual(get.iface, 'org.freedesktop.DBus.Properties');
+    assertEqual(get.replyType, '(v)');
     service.destroy();
+});
+
+asyncTest('a unit that is still activating counts as running', async () => {
+    // 换服务器时这个判断决定发 StartUnit 还是 RestartUnit。判错的话 systemd 会把
+    // StartUnit 并进正在进行的启动任务里，而配置已经被覆盖成新的一条：
+    // 跑着的是旧节点，界面显示的是新节点，界面上看不出任何异常。
+    for (const state of ['active', 'activating', 'deactivating', 'reloading']) {
+        const service = new SingBoxService({bus: busWith({activeState: state})});
+        assertEqual(await service.isRunning(), true, `${state} counts as running`);
+        service.destroy();
+    }
+    for (const state of ['inactive', 'failed']) {
+        const service = new SingBoxService({bus: busWith({activeState: state})});
+        assertEqual(await service.isRunning(), false, `${state} counts as stopped`);
+        service.destroy();
+    }
+});
+
+asyncTest('two concurrent calls resolve the unit once and subscribe once', async () => {
+    // 磁贴点一下就会同时发出好几个查询。只记「解析完的路径」而不记 Promise 的话，
+    // 两边都会看到「还没解析」而各跑一遍，signal_subscribe() 挂两个 handler，
+    // destroy() 只退得掉最后一个——禁用扩展之后仍有回调活着。
+    const bus = busWith();
+    const service = new SingBoxService({bus});
+
+    await Promise.all([service.isInstalled(), service.state(), service.isRunning()]);
+
+    assertEqual(bus.methodNames().filter(name => name === 'GetUnit').length, 1,
+        'the unit is resolved exactly once');
+    assertEqual(bus.methodNames().filter(name => name === 'Subscribe').length, 1,
+        'Manager.Subscribe is sent exactly once');
+    assertEqual(bus.subscriptions.size, 1, 'exactly one signal handler');
+    service.destroy();
+    assertEqual(bus.subscriptions.size, 0, 'and destroy releases it');
 });
 
 asyncTest('a bus that refuses everything reads as inactive, not as a crash', async () => {
     const service = new SingBoxService({bus: new FakeBus({})});
     assertEqual(await service.state(), 'inactive');
-    assertEqual(await service.isActive(), false);
+    assertEqual(await service.isRunning(), false);
     assertEqual(await service.isInstalled(), false);
+    service.destroy();
+});
+
+asyncTest('a failed resolution is not cached forever', async () => {
+    // 总线一时不可用不该把后面每次调用都钉死在同一个错误上。
+    let broken = true;
+    const bus = new FakeBus({
+        GetUnit: () => {
+            if (broken) throw new Error('bus is down');
+            return new GLib.Variant('(o)', [UNIT_OBJECT_PATH]);
+        },
+        LoadUnit: () => {
+            if (broken) throw new Error('bus is down');
+            return new GLib.Variant('(o)', [UNIT_OBJECT_PATH]);
+        },
+        Subscribe: () => null,
+        Get: () => new GLib.Variant('(v)', [new GLib.Variant('s', 'active')]),
+    });
+    const service = new SingBoxService({bus});
+
+    assertEqual(await service.state(), 'inactive', 'while the bus is down');
+    broken = false;
+    assertEqual(await service.state(), 'active', 'after it comes back');
     service.destroy();
 });
 
@@ -252,6 +334,9 @@ asyncTest('Subscribe is sent before listening, or systemd never broadcasts', asy
     const [subscription] = [...bus.subscriptions.values()];
     assertEqual(subscription.signal, 'PropertiesChanged');
     assertEqual(subscription.path, UNIT_OBJECT_PATH);
+    assertEqual(subscription.iface, 'org.freedesktop.DBus.Properties');
+    // arg0 过滤：只要 Unit 这个接口的属性变化，别的接口（Service 等）不进回调。
+    assertEqual(subscription.arg0, 'org.freedesktop.systemd1.Unit');
     service.destroy();
 });
 
@@ -283,8 +368,10 @@ asyncTest('destroy unsubscribes and stops delivering signals', async () => {
     service.destroy();
 
     assertEqual(bus.unsubscribed, [id], 'the signal subscription is released');
-    assert(bus.methodNames().includes('Unsubscribe'),
-        'systemd is told to stop broadcasting to us');
+    // ⚠️ 不能发 Manager.Unsubscribe：会话总线连接是整个 gnome-shell 共用的，
+    // 订阅按连接计，退订会把同一个进程里别的订阅者一起弄哑。
+    assert(!bus.methodNames().includes('Unsubscribe'),
+        'Manager.Unsubscribe would silence other subscribers on the shared connection');
     assertEqual(bus.subscriptions.size, 0);
     assertEqual(seen, [], 'no signal can arrive after destroy');
     assert(service._cancellable.is_cancelled(), 'in-flight calls are cancelled');

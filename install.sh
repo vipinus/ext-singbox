@@ -77,8 +77,13 @@ fi
 # root、不需要 polkit；起 TUN 要的 capability 在 sing-box 二进制上（上面那步 setcap）。
 #
 # 刻意不 enable：这是按需启动的单元，开机不该自己起来。
+#
+# ExecStart 里的 /usr/bin/env sing-box 在安装时换成**绝对路径**：模板里那样写是
+# 为了不写死发行版路径，但装完之后再靠 PATH 去找，跑起来的是哪一个就取决于
+# systemd 用户实例的环境——而 setcap 只给了这一个二进制。
 mkdir -p "$USER_UNIT_DIR"
-cp "$PROJECT_DIR/systemd/singbox-ext.service" "$USER_UNIT_DIR/"
+sed "s|^ExecStart=.*|ExecStart=$SING_BOX run -c %h/.config/sing-box/ext/config.json|" \
+    "$PROJECT_DIR/systemd/singbox-ext.service" > "$USER_UNIT_DIR/singbox-ext.service"
 if command -v systemctl >/dev/null 2>&1; then
     # daemon-reload 不能省：单元文件是新的或改过的时候，systemd 不重读就还认旧的
     # （症状是启动报 not-found，或者用的还是上一版的 ExecStart）。
@@ -87,7 +92,8 @@ if command -v systemctl >/dev/null 2>&1; then
 else
     printf '%s\n' '⚠️ 未找到 systemctl，单元已复制但没有重新加载。' >&2
 fi
-printf '已安装后端单元 %s/singbox-ext.service\n' "$USER_UNIT_DIR"
+printf '已安装后端单元 %s/singbox-ext.service（ExecStart=%s）\n' \
+    "$USER_UNIT_DIR" "$SING_BOX"
 
 # QR import is optional, so a missing zbarimg is a warning rather than an error.
 # The zbar library is often already present; the command line tool is not.

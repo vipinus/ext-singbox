@@ -1,7 +1,7 @@
 {
   "uuid": "singbox@anyfq.com",
   "name": "sing-box Link Manager",
-  "description": "Connect to a sing-box server straight from Quick Settings: import connections from a share link, a subscription URL, or a QR code image, then pick a server from the menu. Subscriptions are cached, so connecting never waits on the network.\n\nThe extension never spawns processes. The sing-box backend runs as a systemd user service (singbox-ext.service) that the install script in the project sets up together with the permissions sing-box needs to create a TUN device; the extension only starts and stops that service over D-Bus. Run that script once before connecting - see the project page.",
+  "description": "Connect to a sing-box server straight from Quick Settings: import connections from a share link, a subscription URL, or a QR code image, then pick a server from the menu. Subscriptions are cached, so connecting never waits on the network.\n\nThe extension runs no background processes; the sing-box backend runs as a systemd user service set up by the project's install script. The optional QR-image import runs the zbarimg tool once, when you pick an image.",
   "shell-version": [
     "45",
     "46",

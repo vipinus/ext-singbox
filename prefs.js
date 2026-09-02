@@ -473,7 +473,8 @@ export default class SingBoxPreferences extends ExtensionPreferences {
             halign: Gtk.Align.END,
             valign: Gtk.Align.CENTER,
         });
-        qrButton.connect('clicked', () => this._importFromQrImage(window, addUrl, toast));
+        qrButton.connect('clicked', () =>
+            this._importFromQrImage(window, addUrl, toast, importCancellable));
 
         const buttonRow = new Adw.ActionRow();
         buttonRow.add_suffix(qrButton);
@@ -497,8 +498,11 @@ export default class SingBoxPreferences extends ExtensionPreferences {
         refresh();
     }
 
-    _importFromQrImage(window, addUrl, toast) {
-        if (!GLib.find_program_in_path('zbarimg')) {
+    _importFromQrImage(window, addUrl, toast, cancellable) {
+        // 解析出绝对路径而不是让 exec 去查 PATH：argv[0] 写成裸名字的话，跑起来
+        // 的是首选项进程环境里 PATH 最前面的那个 zbarimg，那是外面能左右的东西。
+        const zbarimg = GLib.find_program_in_path('zbarimg');
+        if (!zbarimg) {
             // The zbar library alone is not enough; the command line tool ships
             // separately (zbar-tools on Debian and Ubuntu, zbar elsewhere).
             toast(_('QR images need the zbarimg tool: install the zbar-tools package'));
@@ -506,32 +510,39 @@ export default class SingBoxPreferences extends ExtensionPreferences {
         }
 
         const dialog = new Gtk.FileDialog({title: _('Choose a QR code image')});
-        dialog.open(window, null, (source, result) => {
+        dialog.open(window, cancellable, (source, result) => {
             let path;
             try {
                 path = source.open_finish(result).get_path();
             } catch (_error) {
                 return; // The user dismissed the dialog.
             }
-            this._readQrCode(path, addUrl, toast);
+            this._readQrCode(zbarimg, path, addUrl, toast, cancellable);
         });
     }
 
-    _readQrCode(path, addUrl, toast) {
+    /**
+     * 唯一一处起子进程的地方：用户自己点了「从二维码图片导入」才会走到，
+     * 命令写死在代码里、不来自任何设置，读完一张图就退出。
+     * 跟着窗口的 cancellable 走——窗口关了就不该再有回调去碰它的控件。
+     */
+    _readQrCode(zbarimg, path, addUrl, toast, cancellable) {
         let process;
         try {
             process = Gio.Subprocess.new(
-                ['zbarimg', '--quiet', '--raw', path], Gio.SubprocessFlags.STDOUT_PIPE);
+                [zbarimg, '--quiet', '--raw', path], Gio.SubprocessFlags.STDOUT_PIPE);
         } catch (error) {
             toast(format(_('Could not run zbarimg: %s'), error.message));
             return;
         }
 
-        process.communicate_utf8_async(null, null, (proc, result) => {
+        process.communicate_utf8_async(null, cancellable, (proc, result) => {
             let stdout = '';
             try {
                 [, stdout] = proc.communicate_utf8_finish(result);
             } catch (error) {
+                // 取消是窗口关了，这时候 toast 无处可去（控件已经没了）。
+                if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) return;
                 toast(format(_('Could not read the QR image: %s'), error.message));
                 return;
             }

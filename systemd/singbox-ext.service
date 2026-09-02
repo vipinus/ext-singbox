@@ -5,8 +5,11 @@ After=network.target
 
 [Service]
 Type=simple
-# /usr/bin/env 是为了从 PATH 里找 sing-box：systemd 要求 ExecStart 的第一个词是
-# 绝对路径，而 sing-box 装在哪由发行版/用户决定（/usr/bin 与 /usr/local/bin 都常见）。
+# 这是模板里的写法：systemd 要求 ExecStart 的第一个词是绝对路径，而 sing-box 装在
+# 哪由发行版/用户决定（/usr/bin 与 /usr/local/bin 都常见），所以模板先用
+# /usr/bin/env 兜着。install.sh 在安装时会把它替换成本机 sing-box 的**绝对路径**
+# ——装完还靠 PATH 找的话，跑起来的是哪一个取决于用户实例的环境，而 setcap
+# 只给了那一个二进制。
 #
 # ⚠️ 配置路径必须和 lib/singboxService.js 的 configPath() 逐字一致，
 # tests/service-test.js 会把这两处对拍。
