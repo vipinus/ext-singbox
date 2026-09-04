@@ -429,6 +429,11 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         const FALLBACK = 320;
         const MARGIN = 24;
         const MIN = 120;
+        // 最多露出 6 行，剩下的靠滚动。屏幕再高也不多给：24 条全展开时
+        // 列表本身就把快捷设置面板撑得看不到底下的条目（2026-09-04 实测，
+        // 按可用空间算出来的上限仍然溢出），6 行是一眼能扫完又不挤的量。
+        const MAX_ROWS = 6;
+        const ROW_FALLBACK = 40;
 
         let available = FALLBACK;
         try {
@@ -446,6 +451,16 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         } catch (_error) {
             // 量不到就用保守值，不让这里的异常影响菜单本身
         }
+
+        let rowH = ROW_FALLBACK;
+        try {
+            const first = submenu.menu.box.get_first_child();
+            const [, natural] = first ? first.get_preferred_height(-1) : [0, 0];
+            if (Number.isFinite(natural) && natural > 0) rowH = natural;
+        } catch (_error) {
+            // 量不到就按保守行高
+        }
+        available = Math.min(available, MAX_ROWS * rowH);
 
         submenu.menu.actor.set_style(`max-height: ${Math.max(MIN, Math.round(available))}px;`);
     }
