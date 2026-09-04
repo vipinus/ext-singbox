@@ -328,3 +328,7 @@ msgstr "图片中未检测到二维码"
 
 #~ msgid "zbarimg is not installed, so QR images cannot be read"
 #~ msgstr "未安装 zbarimg，无法读取二维码图片"
+
+#: extension.js
+msgid "Subscription \"%s\" is no longer valid (account expired or password changed): import it again from anyfq.com"
+msgstr "订阅「%s」已失效（账号到期或密码已改）：请到 anyfq.com 重新导入"

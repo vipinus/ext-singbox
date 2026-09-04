@@ -47,6 +47,8 @@ class SingBoxVpnManager {
         this._onChanged = onChanged;
         this._refreshCancellable = null;
         this.activeLink = null;
+        // Subscriptions already reported as invalid this session (see _refreshProfile)
+        this._expiredNotified = new Set();
 
         // 切换服务器要重启单元，中间必然经过 deactivating/inactive。那不是
         // 「断开了」，照着报会弹一条莫名其妙的断开通知、磁贴还闪一下。
@@ -147,10 +149,16 @@ class SingBoxVpnManager {
     /**
      * Update a subscription's cached configuration for next time.
      *
-     * Deliberately silent: the token behind the URL is only valid for 24 hours
-     * by design, so a failed refresh is the expected steady state once it
-     * lapses, while the credentials already cached keep working. Warning about
-     * it every connect would be a permanent false alarm.
+     * Mostly silent: the network may simply be down, and the cached
+     * configuration keeps working, so a transient failure is not worth a
+     * notification on every connect.
+     *
+     * HTTP 401 is the one failure that is worth telling the user about: since
+     * 2026-09-04 the token lives until the account expires and is revoked by a
+     * password change, so a 401 means the cached credentials will stop
+     * working too (or already have). Said once per subscription per session —
+     * every connect would be nagging, never would leave the user with a
+     * connection that dies for no visible reason.
      *
      * The result never touches the running service — a silent reconnect is
      * behaviour no user could explain.
@@ -165,7 +173,15 @@ class SingBoxVpnManager {
             // callback can still write dconf after destroy(), i.e. after
             // gnome-shell has disabled the extension.
             if (!this._settings) return;
-            if (error !== null) return;
+            if (error !== null) {
+                if (error.startsWith('HTTP 401') && !this._expiredNotified.has(link.id)) {
+                    this._expiredNotified.add(link.id);
+                    Main.notify(APP_NAME, format(
+                        _('Subscription "%s" is no longer valid (account expired or password changed): import it again from anyfq.com'),
+                        link.name || link.id));
+                }
+                return;
+            }
 
             const result = isValidRemoteConfig(text);
             if (!result.ok) return;
