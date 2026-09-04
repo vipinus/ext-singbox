@@ -294,9 +294,13 @@ export default class SingBoxPreferences extends ExtensionPreferences {
             if (!configUrl && typed.startsWith('https://') && /[?&]token=/.test(typed))
                 configUrl = typed;
 
+            let usedExisting = false;
             if (!configUrl) {
                 const existing = readLinks(settings).find(link => link.kind === 'profile' && link.url);
-                if (existing) configUrl = existing.url;
+                if (existing) {
+                    configUrl = existing.url;
+                    usedExisting = true;
+                }
             }
             if (!configUrl) {
                 toast(_('Import one subscription first, or paste a subscription link above'));
@@ -323,8 +327,14 @@ export default class SingBoxPreferences extends ExtensionPreferences {
 
             fetchText(listUrl, importCancellable, (text, error) => {
                 if (error !== null) {
-                    // 令牌过期是这里最常见的失败，且用户完全可以自己解决，
+                    // 令牌失效是这里最常见的失败，且用户完全可以自己解决，
                     // 所以把原因原样带出来，不要只说「失败了」。
+                    // 没粘贴新链接、拿已有条目的令牌去试而被 401 时，要点明
+                    // 「存着的令牌已失效」——否则用户以为是网络或站点坏了。
+                    if (usedExisting && String(error).startsWith('HTTP 401')) {
+                        finish(_('The stored subscription is no longer valid (account expired or password changed). Paste a fresh link from anyfq.com above and import again.'));
+                        return;
+                    }
                     finish(format(_('Could not fetch the region list: %s'), error));
                     return;
                 }

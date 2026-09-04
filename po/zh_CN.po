@@ -332,3 +332,7 @@ msgstr "图片中未检测到二维码"
 #: extension.js
 msgid "Subscription \"%s\" is no longer valid (account expired or password changed): import it again from anyfq.com"
 msgstr "订阅「%s」已失效（账号到期或密码已改）：请到 anyfq.com 重新导入"
+
+#: prefs.js
+msgid "The stored subscription is no longer valid (account expired or password changed). Paste a fresh link from anyfq.com above and import again."
+msgstr "已存的订阅已失效（账号到期或密码已改）。请在上方粘贴从 anyfq.com 新拿的链接后再导入。"

@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: sing-box Link Manager 1\n"
 "Report-Msgid-Bugs-To: https://github.com/gname/gname-shell-extension-singbox/"
 "issues\n"
-"POT-Creation-Date: 2026-09-04 14:28-0400\n"
+"POT-Creation-Date: 2026-09-04 15:10-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -219,6 +219,12 @@ msgstr ""
 
 #: prefs.js
 msgid "Fetching the region list…"
+msgstr ""
+
+#: prefs.js
+msgid ""
+"The stored subscription is no longer valid (account expired or password "
+"changed). Paste a fresh link from anyfq.com above and import again."
 msgstr ""
 
 #: prefs.js
