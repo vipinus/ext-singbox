@@ -460,7 +460,19 @@ class SingBoxToggle extends QuickSettings.QuickMenuToggle {
         } catch (_error) {
             // 量不到就按保守行高
         }
-        available = Math.min(available, MAX_ROWS * rowH);
+        // 上限取整行：6 行的高度再加上 ScrollView 自己的内边距与边框，
+        // 这样第 6 行完整露出、第 7 行一点都不露，而不是切在半行上。
+        let chrome = 0;
+        try {
+            const node = submenu.menu.actor.get_theme_node();
+            chrome = node.get_padding(St.Side.TOP) + node.get_padding(St.Side.BOTTOM)
+                + node.get_border_width(St.Side.TOP) + node.get_border_width(St.Side.BOTTOM);
+        } catch (_error) {
+            // 还没进舞台时拿不到 theme node，按 0 算
+        }
+        const sixRows = Math.round(MAX_ROWS * rowH + chrome);
+        // 屏幕真的放不下 6 行时才让位给可用空间
+        available = Math.min(available, sixRows);
 
         submenu.menu.actor.set_style(`max-height: ${Math.max(MIN, Math.round(available))}px;`);
     }
