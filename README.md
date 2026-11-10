@@ -1,6 +1,12 @@
 # sing-box GNOME Shell Extension
 
 GNOME Shell extension for importing and managing sing-box VPN links.
+Supports GNOME Shell 45–50 (see `metadata.json`).
+
+Status: version 1.0.0. Not yet published on extensions.gnome.org — the
+2026-09-02 upload was auto-rejected and has since been reworked (backend moved
+to a systemd user unit, see `docs/STATUS.md`); the outcome of a re-upload has not
+been verified. Install from source as described below.
 
 ## Features
 
